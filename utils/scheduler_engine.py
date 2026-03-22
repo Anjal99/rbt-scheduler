@@ -509,11 +509,135 @@ def try_assign_slot(client, day, remaining_start, remaining_end,
 
 # ── Main Entry Point ─────────────────────────────────────────────────────────
 
+def _find_common_free_slot(therapist, days, need_start, need_end, timelines, assignments):
+    """
+    Find the largest free slot for a therapist that is available on ALL given days.
+    Returns a TimeBlock or None.
+    """
+    # Get free slots for each day
+    per_day_free = {}
+    for d in days:
+        per_day_free[d] = find_free_slots(therapist.name, d, timelines, assignments)
+
+    # Find the intersection of free time across all days
+    # Start with the need range and intersect with each day's free slots
+    candidates = [TimeBlock(need_start, need_end)]
+
+    for d in days:
+        day_free = per_day_free[d]
+        new_candidates = []
+        for cand in candidates:
+            for slot in day_free:
+                inter = cand.intersection(slot)
+                if inter and inter.duration_minutes() >= 15:
+                    new_candidates.append(inter)
+        candidates = new_candidates
+        if not candidates:
+            return None
+
+    # Return the largest candidate
+    if candidates:
+        return max(candidates, key=lambda c: c.duration_minutes())
+    return None
+
+
+def try_assign_multi_day(client, days, remaining_start, remaining_end,
+                         therapists, timelines, assignments, relaxed=False):
+    """
+    Try to find a therapist who can cover the same time slot on ALL given days.
+    Returns (therapist, capped_block) or (None, None).
+    """
+    intensity_max = HIGH_INTENSITY_MAX if client.intensity == 'High' else LOW_INTENSITY_MAX
+    best_t = None
+    best_block = None
+    best_score = -9999
+
+    for t in therapists:
+        # Must be available on all days
+        if not all(d in t.days for d in days):
+            continue
+
+        # Location check (use first day's location as representative)
+        day_loc = client.location_by_day.get(days[0], 'Clinic')
+        if day_loc == 'Home' and not t.in_home:
+            continue
+
+        # Workload check — estimate hours that would be added (slot * num_days)
+        weekly = therapist_weekly_hours(t.name, assignments)
+        if t.is_float and t.direct_max and weekly >= t.direct_max:
+            continue
+        if not relaxed:
+            if not t.forty_hour_eligible and weekly >= HARD_CAP:
+                continue
+            if weekly >= FORTY_CAP:
+                continue
+        else:
+            if weekly >= FORTY_CAP:
+                continue
+
+        # Find common free slot across all days
+        common = _find_common_free_slot(t, days, remaining_start, remaining_end,
+                                         timelines, assignments)
+        if not common or common.duration_minutes() < 15:
+            continue
+
+        # Cap by intensity
+        max_mins = int(intensity_max * 60)
+        capped_mins = min(common.duration_minutes(), max_mins)
+
+        # Cap by chain limit on each day
+        for d in days:
+            test_end = time_add_minutes(common.start, capped_mins)
+            if time_to_minutes(test_end) > time_to_minutes(common.end):
+                test_end = common.end
+            while capped_mins >= 15:
+                test_end = time_add_minutes(common.start, capped_mins)
+                if time_to_minutes(test_end) > time_to_minutes(common.end):
+                    test_end = common.end
+                chain = chain_span_if_inserted(t.name, d, common.start, test_end, assignments)
+                if chain <= MAX_CHAIN_HOURS + 0.01:
+                    break
+                capped_mins -= 15
+            if capped_mins < 15:
+                break
+
+        if capped_mins < 15:
+            continue
+
+        capped_end = time_add_minutes(common.start, capped_mins)
+        if time_to_minutes(capped_end) > time_to_minutes(common.end):
+            capped_end = common.end
+        capped = TimeBlock(common.start, capped_end)
+
+        # Travel buffer check on all days
+        all_travel_ok = True
+        for d in days:
+            d_loc = client.location_by_day.get(d, 'Clinic')
+            if not travel_buffer_ok(t.name, d, capped.start, capped.end, d_loc, assignments):
+                all_travel_ok = False
+                break
+        if not all_travel_ok:
+            continue
+
+        # Score (use first day as representative)
+        s = score_therapist(t, client, days[0], capped, assignments)
+        # Bonus for covering more days consistently
+        s += len(days) * 5
+
+        if s > best_score:
+            best_score = s
+            best_t = t
+            best_block = capped
+
+    return best_t, best_block
+
+
 def generate_schedule(therapists_df: pd.DataFrame,
                       clients_df: pd.DataFrame) -> tuple:
     """
-    Main entry point. Takes therapist and client DataFrames,
-    returns (assignments_df, warnings_list, stats_dict).
+    Main entry point. Generates a CONSISTENT weekly schedule where the same
+    therapist covers the same time slot across all of a client's days.
+    Returns (assignments_df, warnings_list, stats_dict).
     """
     therapists = df_to_therapists(therapists_df)
     clients = df_to_clients(clients_df)
@@ -538,56 +662,70 @@ def generate_schedule(therapists_df: pd.DataFrame,
 
     sorted_clients = sorted(clients, key=difficulty)
 
-    # Pass 1: Main scheduling
+    # ── Pass 1: Consistent multi-day scheduling ──
+    # Group each client's days by their time block (same start/end = same group)
     for client in sorted_clients:
+        # Group days with identical schedule needs
+        schedule_groups = {}
         for day in client.days:
             if day not in client.schedule:
                 continue
             need = client.schedule[day]
-            remaining_start = need.start
-            remaining_end = need.end
+            key = (time_to_minutes(need.start), time_to_minutes(need.end))
+            if key not in schedule_groups:
+                schedule_groups[key] = []
+            schedule_groups[key].append(day)
+
+        for (need_start_m, need_end_m), days in schedule_groups.items():
+            need_start = minutes_to_time(need_start_m)
+            need_end = minutes_to_time(need_end_m)
+            remaining_start = need_start
             block_num = 1
-            pass1_subgaps = []
 
             attempts = 0
-            while time_to_minutes(remaining_start) < time_to_minutes(remaining_end):
+            while time_to_minutes(remaining_start) < need_end_m:
                 attempts += 1
                 if attempts > 30:
                     break
-                result = try_assign_slot(client, day, remaining_start, remaining_end,
-                                         therapists, timelines, assignments)
-                if not result:
-                    result = try_assign_slot(client, day, remaining_start, remaining_end,
-                                             therapists, timelines, assignments, relaxed=True)
-                if result:
-                    if time_to_minutes(result.start) > time_to_minutes(remaining_start) + 5:
-                        pass1_subgaps.append((remaining_start, result.start))
-                    result.notes = f"Block {block_num}"
-                    assignments.append(result)
-                    remaining_start = result.end
-                    if time_to_minutes(remaining_start) < time_to_minutes(remaining_end):
+
+                # Try to find a therapist available on ALL days in this group
+                best_t, best_block = try_assign_multi_day(
+                    client, days, remaining_start, need_end,
+                    therapists, timelines, assignments
+                )
+                if not best_t:
+                    best_t, best_block = try_assign_multi_day(
+                        client, days, remaining_start, need_end,
+                        therapists, timelines, assignments, relaxed=True
+                    )
+
+                if best_t and best_block:
+                    # Assign the SAME block to ALL days
+                    for d in days:
+                        d_loc = client.location_by_day.get(d, 'Clinic')
+                        atype = "Recurring"
+                        if best_t.is_float:
+                            rec_hours = sum(
+                                a.duration_hours() for a in assignments
+                                if a.therapist == best_t.name and a.assignment_type == "Recurring"
+                            )
+                            if best_t.direct_target and rec_hours >= best_t.direct_target:
+                                atype = "Float"
+
+                        assignments.append(Assignment(
+                            client=client.name, therapist=best_t.name,
+                            day=d, start=best_block.start, end=best_block.end,
+                            location=d_loc, assignment_type=atype,
+                            notes=f"Block {block_num}"
+                        ))
+
+                    remaining_start = best_block.end
+                    if time_to_minutes(remaining_start) < need_end_m:
                         block_num += 1
                 else:
                     break
 
-            for sg_start, sg_end in pass1_subgaps:
-                sg_remaining = sg_start
-                sg_attempts = 0
-                while time_to_minutes(sg_remaining) < time_to_minutes(sg_end):
-                    sg_attempts += 1
-                    if sg_attempts > 5:
-                        break
-                    result = try_assign_slot(client, day, sg_remaining, sg_end,
-                                             therapists, timelines, assignments, relaxed=True)
-                    if result:
-                        result.notes = f"Block {block_num} (sub-gap)"
-                        assignments.append(result)
-                        sg_remaining = result.end
-                        block_num += 1
-                    else:
-                        break
-
-    # Pass 2: Fill remaining gaps
+    # ── Pass 2: Fill gaps per-day (fallback for days that couldn't get consistent coverage) ──
     for client in sorted_clients:
         for day in client.days:
             if day not in client.schedule:
@@ -610,7 +748,6 @@ def generate_schedule(therapists_df: pd.DataFrame,
             for gap_start, gap_end in gaps:
                 remaining_start = gap_start
                 block_num = len(day_a) + 1
-                sub_gaps = []
                 attempts = 0
                 while time_to_minutes(remaining_start) < time_to_minutes(gap_end):
                     attempts += 1
@@ -619,32 +756,14 @@ def generate_schedule(therapists_df: pd.DataFrame,
                     result = try_assign_slot(client, day, remaining_start, gap_end,
                                              therapists, timelines, assignments, relaxed=True)
                     if result:
-                        if time_to_minutes(result.start) > time_to_minutes(remaining_start) + 5:
-                            sub_gaps.append((remaining_start, result.start))
                         result.notes = f"Block {block_num} (gap fill)"
                         assignments.append(result)
                         remaining_start = result.end
                         block_num += 1
                     else:
                         break
-                for sg_start, sg_end in sub_gaps:
-                    sg_remaining = sg_start
-                    sg_attempts = 0
-                    while time_to_minutes(sg_remaining) < time_to_minutes(sg_end):
-                        sg_attempts += 1
-                        if sg_attempts > 5:
-                            break
-                        result = try_assign_slot(client, day, sg_remaining, sg_end,
-                                                 therapists, timelines, assignments, relaxed=True)
-                        if result:
-                            result.notes = f"Block {block_num} (sub-gap fill)"
-                            assignments.append(result)
-                            sg_remaining = result.end
-                            block_num += 1
-                        else:
-                            break
 
-    # Collect final warnings
+    # ── Collect warnings ──
     for client in sorted_clients:
         for day in client.days:
             if day not in client.schedule:
@@ -684,7 +803,7 @@ def generate_schedule(therapists_df: pd.DataFrame,
         if t.preferred_max_hours and weekly > t.preferred_max_hours:
             warnings.append(f"Over preferred max: {t.name} at {weekly:.1f}h (pref {t.preferred_max_hours}h)")
 
-    # Convert to DataFrame
+    # Build output
     total_needed = sum(tb.duration_hours() for c in clients for tb in c.schedule.values())
     total_assigned = sum(a.duration_hours() for a in assignments)
 
@@ -698,7 +817,6 @@ def generate_schedule(therapists_df: pd.DataFrame,
         'warnings_count': len(warnings),
     }
 
-    # Build assignments DataFrame
     rows = []
     for a in assignments:
         rows.append({
