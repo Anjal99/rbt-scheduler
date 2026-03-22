@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.DS_Store
+data/therapists.db
+data/*.db
+~$*
+*.swp
+.env
+.env.*
+*.xlsx
+secrets.toml
+.streamlit/secrets.toml
