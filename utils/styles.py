@@ -198,6 +198,49 @@ button[kind="primary"]:hover {
     font-weight: 500 !important;
 }
 
+/* ── Mobile navigation bar ── */
+.mobile-nav {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .mobile-nav {
+        display: flex !important;
+        position: sticky;
+        top: 0;
+        z-index: 999;
+        background: #1E293B;
+        padding: 0.5rem 0.25rem;
+        gap: 2px;
+        justify-content: space-around;
+        margin: -1rem -0.75rem 0.75rem -0.75rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .mobile-nav a {
+        color: #CBD5E1 !important;
+        text-decoration: none !important;
+        font-size: 0.7rem;
+        font-weight: 500;
+        text-align: center;
+        padding: 0.4rem 0.25rem;
+        border-radius: 6px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        transition: background 0.2s;
+    }
+    .mobile-nav a:hover,
+    .mobile-nav a.active {
+        background: #334155;
+        color: #F8FAFC !important;
+    }
+    .mobile-nav .nav-icon {
+        font-size: 1.1rem;
+    }
+}
+
 /* ══════════════════════════════════════════════════════════
    MOBILE RESPONSIVE
    ══════════════════════════════════════════════════════════ */
@@ -327,9 +370,36 @@ button[kind="primary"]:hover {
 """
 
 
+MOBILE_NAV_HTML = """
+<div class="mobile-nav">
+    <a href="/" target="_self">
+        <span class="nav-icon">🏠</span>
+        Home
+    </a>
+    <a href="/therapists" target="_self">
+        <span class="nav-icon">👥</span>
+        Therapists
+    </a>
+    <a href="/upload_clients" target="_self">
+        <span class="nav-icon">📄</span>
+        Upload
+    </a>
+    <a href="/schedule" target="_self">
+        <span class="nav-icon">📅</span>
+        Schedule
+    </a>
+    <a href="/validation" target="_self">
+        <span class="nav-icon">✅</span>
+        Validate
+    </a>
+</div>
+"""
+
+
 def apply_global_styles():
     """Call this at the top of every page."""
     st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
+    st.markdown(MOBILE_NAV_HTML, unsafe_allow_html=True)
 
 
 def sidebar_nav():
