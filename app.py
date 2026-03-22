@@ -18,19 +18,16 @@ st.set_page_config(
 
 apply_global_styles()
 
-# ── Auto-load Excel data on first run ──
+# ── Auto-load from local Excel if present (dev only) ──
 EXCEL_PATH = os.path.join(os.path.dirname(__file__), 'RBT + Client Schedule.xlsx')
 
 if os.path.exists(EXCEL_PATH):
     if therapist_count() == 0:
         try:
             tdf = pd.read_excel(EXCEL_PATH, sheet_name='Therapists')
-            count = bulk_import_therapists(tdf)
-            if count > 0:
-                st.toast(f"Auto-imported {count} therapists from Excel")
+            bulk_import_therapists(tdf)
         except Exception:
             pass
-
     if not st.session_state.get('clients_uploaded'):
         try:
             cdf = pd.read_excel(EXCEL_PATH, sheet_name='Clients')
@@ -45,10 +42,64 @@ sidebar_nav()
 # ── Main Content ──
 page_header("Therapy Scheduler Pro", "Automated weekly scheduling for your therapy clinic")
 
-# Status overview
+# ── Upload section (shown when data is missing) ──
 t_count = therapist_count()
 c_count = len(st.session_state.get('clients_df', []))
 has_schedule = st.session_state.get('schedule_generated', False)
+
+if t_count == 0 or c_count == 0:
+    st.markdown("### Upload Your Schedule File")
+    st.markdown(
+        "Upload your Excel file containing both **Therapists** and **Clients** sheets. "
+        "The app will load both automatically."
+    )
+
+    uploaded = st.file_uploader(
+        "Choose your Excel file (.xlsx)",
+        type=["xlsx"],
+        key="home_upload",
+        label_visibility="collapsed",
+    )
+
+    if uploaded:
+        try:
+            xl = pd.ExcelFile(uploaded)
+            sheets = xl.sheet_names
+            loaded = []
+
+            # Load Therapists
+            t_sheet = next((s for s in sheets if 'therapist' in s.lower()), None)
+            if t_sheet:
+                tdf = pd.read_excel(uploaded, sheet_name=t_sheet)
+                count = bulk_import_therapists(tdf)
+                loaded.append(f"{count} therapists from '{t_sheet}'")
+
+            # Load Clients
+            c_sheet = next((s for s in sheets if 'client' in s.lower()), None)
+            if c_sheet:
+                uploaded.seek(0)
+                cdf = pd.read_excel(uploaded, sheet_name=c_sheet)
+                st.session_state['clients_df'] = cdf
+                st.session_state['clients_uploaded'] = True
+                loaded.append(f"{len(cdf)} clients from '{c_sheet}'")
+
+            if loaded:
+                st.success(f"Loaded: {', '.join(loaded)}")
+                # Clear any stale schedule
+                st.session_state.pop('schedule_generated', None)
+                st.session_state.pop('assignments_df', None)
+                st.rerun()
+            else:
+                st.warning("Could not find 'Therapists' or 'Clients' sheets in the file.")
+
+        except Exception as e:
+            st.error(f"Error reading file: {e}")
+
+    st.markdown("---")
+
+# ── Status overview ──
+t_count = therapist_count()
+c_count = len(st.session_state.get('clients_df', []))
 
 if has_schedule:
     stats = st.session_state.get('schedule_stats', {})
@@ -65,22 +116,26 @@ if has_schedule:
     st.markdown("")
     st.success("Schedule is generated! Go to the **Schedule** page to view and export it.")
     st.page_link("pages/3_schedule.py", label="View Schedule", icon="📅")
-else:
+elif t_count > 0 and c_count > 0:
     c1, c2 = st.columns(2)
     with c1:
         st.metric("Therapists", t_count)
     with c2:
         st.metric("Clients", c_count)
 
+    st.markdown("")
+    st.info("Data loaded! Go to **Schedule** to generate the weekly schedule.")
+    st.page_link("pages/3_schedule.py", label="Generate Schedule", icon="📅")
+
 st.markdown("")
 
 # ── Quick start cards ──
-st.markdown("### Get Started")
+st.markdown("### Pages")
 col1, col2, col3 = st.columns(3)
 
 with col1:
     info_card(
-        "👥", "1. Manage Therapists",
+        "👥", "Manage Therapists",
         "Add, edit, and remove therapists from your roster. "
         "Set availability, in-home capability, and workload preferences."
     )
@@ -88,19 +143,19 @@ with col1:
 
 with col2:
     info_card(
-        "📄", "2. Upload Clients",
-        "Upload your client/patient list as an Excel file. "
-        "We'll parse schedules, intensity levels, and location needs."
+        "📄", "Upload Clients",
+        "Upload or replace your client/patient list. "
+        "You can also upload the full Excel here to load both sheets."
     )
     st.page_link("pages/2_upload_clients.py", label="Upload Clients", icon="📄")
 
 with col3:
     info_card(
-        "📅", "3. Generate Schedule",
-        "Generate an optimized weekly schedule that respects all "
-        "intensity caps, breaks, travel buffers, and workload limits."
+        "📅", "Schedule",
+        "Generate the weekly schedule, view the timetable, "
+        "and export to Excel or CSV."
     )
-    st.page_link("pages/3_schedule.py", label="Generate Schedule", icon="📅")
+    st.page_link("pages/3_schedule.py", label="Schedule", icon="📅")
 
 # ── Rules summary ──
 st.markdown("")

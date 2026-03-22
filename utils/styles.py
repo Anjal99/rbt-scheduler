@@ -197,6 +197,132 @@ button[kind="primary"]:hover {
     border-radius: 8px !important;
     font-weight: 500 !important;
 }
+
+/* ══════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE
+   ══════════════════════════════════════════════════════════ */
+
+/* Mobile: stack columns, smaller text, tighter spacing */
+@media (max-width: 768px) {
+    /* Tighter main padding */
+    .main .block-container {
+        padding: 1rem 0.75rem !important;
+        max-width: 100% !important;
+    }
+
+    /* Page header smaller */
+    .page-header h1 {
+        font-size: 1.25rem;
+    }
+    .page-header p {
+        font-size: 0.8rem;
+    }
+
+    /* Cards: less padding on mobile */
+    .card {
+        padding: 1rem;
+    }
+    .card h3 {
+        font-size: 0.95rem;
+    }
+    .card p {
+        font-size: 0.82rem;
+    }
+    .card-icon {
+        font-size: 1.4rem;
+        margin-bottom: 0.3rem;
+    }
+
+    /* Metrics: smaller on mobile */
+    [data-testid="stMetric"] {
+        padding: 0.6rem 0.75rem;
+    }
+    [data-testid="stMetric"] label {
+        font-size: 0.6rem !important;
+    }
+    [data-testid="stMetricValue"] {
+        font-size: 1.1rem !important;
+    }
+
+    /* Tables: horizontal scroll */
+    [data-testid="stDataFrame"] {
+        overflow-x: auto !important;
+    }
+
+    /* Plotly charts: allow horizontal scroll */
+    .stPlotlyChart {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Tabs: scrollable on mobile */
+    .stTabs [data-baseweb="tab-list"] {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+    }
+    .stTabs [data-baseweb="tab"] {
+        padding: 6px 12px;
+        font-size: 0.85rem;
+        white-space: nowrap;
+    }
+
+    /* Sidebar: narrower on mobile */
+    section[data-testid="stSidebar"] {
+        width: 240px !important;
+        min-width: 240px !important;
+    }
+
+    /* Buttons: full width on mobile */
+    .stButton > button,
+    .stDownloadButton > button {
+        width: 100% !important;
+    }
+
+    /* Forms: tighter */
+    [data-testid="stForm"] {
+        padding: 0.75rem !important;
+    }
+
+    /* By-therapist/client detail lines */
+    .main .stMarkdown p {
+        font-size: 0.88rem;
+    }
+}
+
+/* Small phones */
+@media (max-width: 480px) {
+    .main .block-container {
+        padding: 0.5rem 0.5rem !important;
+    }
+
+    .page-header h1 {
+        font-size: 1.1rem;
+    }
+
+    .card {
+        padding: 0.75rem;
+    }
+
+    [data-testid="stMetricValue"] {
+        font-size: 1rem !important;
+    }
+
+    /* Stack sidebar metrics */
+    section[data-testid="stSidebar"] [data-testid="stMetric"] {
+        padding: 0.5rem !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stMetricValue"] {
+        font-size: 1rem !important;
+    }
+}
+
+/* Ensure Plotly charts have min height on mobile for readability */
+@media (max-width: 768px) {
+    .js-plotly-plot {
+        min-height: 300px;
+    }
+}
 </style>
 """
 

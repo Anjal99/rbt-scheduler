@@ -183,17 +183,17 @@ if view == "Timetable":
             )
             st.plotly_chart(fig, use_container_width=True)
 
-    # Legend
+    # Legend — wrapping flex layout for mobile
+    legend_html = '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:0.5rem;">'
+    for client in clients_list:
+        c = color_map[client]
+        legend_html += (
+            f'<span style="background:{c};color:white;padding:3px 10px;'
+            f'border-radius:6px;font-size:12px;font-weight:500;white-space:nowrap">{client}</span>'
+        )
+    legend_html += '</div>'
     st.markdown("**Clients:**")
-    cols = st.columns(min(10, max(1, len(clients_list))))
-    for i, client in enumerate(clients_list):
-        with cols[i % len(cols)]:
-            c = color_map[client]
-            st.markdown(
-                f'<span style="background:{c};color:white;padding:3px 10px;'
-                f'border-radius:6px;font-size:12px;font-weight:500">{client}</span>',
-                unsafe_allow_html=True
-            )
+    st.markdown(legend_html, unsafe_allow_html=True)
 
 elif view == "Table":
     display_df = assignments_df.copy()
