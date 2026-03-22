@@ -6,18 +6,8 @@ import streamlit as st
 
 GLOBAL_CSS = """
 <style>
-/* ── Hide default Streamlit chrome ── */
-#MainMenu {visibility: hidden;}
+/* ── Hide default Streamlit footer only ── */
 footer {visibility: hidden;}
-header[data-testid="stHeader"] {visibility: hidden;}
-
-/* ── Hide the auto-generated page navigation at top of sidebar ── */
-[data-testid="stSidebarNav"],
-nav[data-testid="stSidebarNav"],
-div[data-testid="stSidebarNavItems"],
-ul[data-testid="stSidebarNavItems"] {
-    display: none !important;
-}
 
 /* ── Sidebar dark theme ── */
 section[data-testid="stSidebar"] > div:first-child {
