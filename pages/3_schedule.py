@@ -95,7 +95,7 @@ st.markdown("---")
 # ── Views ──
 view = st.radio(
     "View mode",
-    ["Timetable", "Table", "By Therapist", "By Client"],
+    ["Timetable", "Edit Schedule", "By Therapist", "By Client"],
     horizontal=True,
     label_visibility="collapsed"
 )
@@ -195,18 +195,124 @@ if view == "Timetable":
     st.markdown("**Clients:**")
     st.markdown(legend_html, unsafe_allow_html=True)
 
-elif view == "Table":
-    display_df = assignments_df.copy()
-    display_df['Start'] = display_df['Start'].apply(
-        lambda t: format_time(t) if isinstance(t, time) else str(t)
+elif view == "Edit Schedule":
+    from utils.validators import validate_schedule as run_validation
+
+    # Build option lists
+    all_therapist_names = sorted(therapists_df['name'].tolist())
+    all_client_names = sorted(clients_df['Name'].tolist()) if 'Name' in clients_df.columns else sorted(clients_df['name'].tolist())
+    day_options = DAYS_ORDER[:6]
+    location_options = ["Clinic", "Home"]
+    type_options = ["Recurring", "Float"]
+
+    # Prepare editable copy
+    edit_df = assignments_df.copy().reset_index(drop=True)
+
+    # Sort for display
+    day_order_map = {d: i for i, d in enumerate(DAYS_ORDER)}
+    edit_df['_sort'] = edit_df['Day'].map(day_order_map).fillna(99)
+    edit_df = edit_df.sort_values(['Client', '_sort', 'Start']).drop(columns=['_sort']).reset_index(drop=True)
+
+    # Run validation on current state
+    flags = run_validation(edit_df, therapists_df, clients_df)
+    errors = [f for f in flags if f['severity'] in ('Error', 'Critical')]
+    warns = [f for f in flags if f['severity'] == 'Warning']
+    infos = [f for f in flags if f['severity'] == 'Info']
+
+    if errors:
+        st.error(f"{len(errors)} error(s) found")
+    if warns:
+        st.warning(f"{len(warns)} warning(s)")
+    if not errors and not warns:
+        st.success("No rule violations")
+
+    if errors or warns:
+        with st.expander(f"View {len(errors)} errors, {len(warns)} warnings"):
+            for f in errors:
+                st.error(f"**{f['rule']}** {f['who']} {f['day']}: {f['detail']}")
+            for f in warns:
+                st.warning(f"**{f['rule']}** {f['who']} {f['day']}: {f['detail']}")
+
+    st.markdown("")
+
+    # Editable table
+    edited = st.data_editor(
+        edit_df,
+        use_container_width=True,
+        height=500,
+        hide_index=True,
+        num_rows="dynamic",
+        column_config={
+            "Client": st.column_config.SelectboxColumn("Client", options=all_client_names, width="small"),
+            "Therapist": st.column_config.SelectboxColumn("Therapist", options=all_therapist_names, width="medium"),
+            "Day": st.column_config.SelectboxColumn("Day", options=day_options, width="small"),
+            "Start": st.column_config.TimeColumn("Start", format="h:mm a", width="small"),
+            "End": st.column_config.TimeColumn("End", format="h:mm a", width="small"),
+            "Location": st.column_config.SelectboxColumn("Location", options=location_options, width="small"),
+            "Type": st.column_config.SelectboxColumn("Type", options=type_options, width="small"),
+            "Notes": st.column_config.TextColumn("Notes", width="medium"),
+        },
+        key="schedule_editor",
     )
-    display_df['End'] = display_df['End'].apply(
-        lambda t: format_time(t) if isinstance(t, time) else str(t)
-    )
-    day_order = {d: i for i, d in enumerate(DAYS_ORDER)}
-    display_df['_sort'] = display_df['Day'].map(day_order).fillna(99)
-    display_df = display_df.sort_values(['Client', '_sort', 'Start']).drop(columns=['_sort'])
-    st.dataframe(display_df, use_container_width=True, height=600, hide_index=True)
+
+    # Save button
+    col_save, col_add = st.columns([1, 1])
+    with col_save:
+        if st.button("Save Changes", type="primary", use_container_width=True):
+            # Validate before saving
+            new_flags = run_validation(edited, therapists_df, clients_df)
+            new_errors = [f for f in new_flags if f['severity'] in ('Error', 'Critical')]
+
+            if new_errors:
+                st.error(f"Cannot save: {len(new_errors)} error(s) remain. Fix overlaps and chain violations first.")
+                for f in new_errors:
+                    st.error(f"**{f['rule']}** {f['who']} {f['day']}: {f['detail']}")
+            else:
+                st.session_state['assignments_df'] = edited.copy()
+                # Recalculate stats
+                total_assigned = sum(
+                    (time_to_minutes(r['End']) - time_to_minutes(r['Start'])) / 60.0
+                    for _, r in edited.iterrows()
+                    if isinstance(r['Start'], time) and isinstance(r['End'], time)
+                )
+                st.session_state['schedule_stats']['total_assignments'] = len(edited)
+                st.session_state['schedule_stats']['total_hours_assigned'] = total_assigned
+                needed = st.session_state['schedule_stats']['total_hours_needed']
+                st.session_state['schedule_stats']['coverage_pct'] = (total_assigned / needed * 100) if needed > 0 else 0
+                st.session_state['schedule_stats']['warnings_count'] = len(new_flags)
+                st.success("Schedule saved!")
+                st.rerun()
+
+    # Quick-add form
+    st.markdown("---")
+    st.markdown("#### Add New Assignment")
+    with st.form("add_assignment_form", clear_on_submit=True):
+        ac1, ac2, ac3 = st.columns(3)
+        with ac1:
+            new_client = st.selectbox("Client", options=all_client_names, key="new_a_client")
+            new_start = st.time_input("Start Time", value=time(8, 0), key="new_a_start")
+        with ac2:
+            new_therapist = st.selectbox("Therapist", options=all_therapist_names, key="new_a_therapist")
+            new_end = st.time_input("End Time", value=time(12, 0), key="new_a_end")
+        with ac3:
+            new_day = st.selectbox("Day", options=day_options, key="new_a_day")
+            new_loc = st.selectbox("Location", options=location_options, key="new_a_loc")
+
+        if st.form_submit_button("Add Assignment", type="primary"):
+            new_row = pd.DataFrame([{
+                'Client': new_client,
+                'Therapist': new_therapist,
+                'Day': new_day,
+                'Start': new_start,
+                'End': new_end,
+                'Location': new_loc,
+                'Type': 'Recurring',
+                'Notes': 'Manual',
+            }])
+            updated = pd.concat([st.session_state['assignments_df'], new_row], ignore_index=True)
+            st.session_state['assignments_df'] = updated
+            st.success(f"Added: {new_client} with {new_therapist} on {new_day} {format_time(new_start)}-{format_time(new_end)}")
+            st.rerun()
 
 elif view == "By Therapist":
     therapist_names = sorted(assignments_df['Therapist'].unique())
