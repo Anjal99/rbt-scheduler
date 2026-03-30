@@ -1,0 +1,386 @@
+/* === Schedule: Clean Planner Layout === */
+
+/* Schedule toolbar */
+.schedule-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.filter-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.filter-select {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: .8rem;
+    background: var(--surface);
+    color: var(--text);
+    outline: none;
+    min-width: 160px;
+    max-width: 200px;
+    cursor: pointer;
+}
+.filter-select:focus { border-color: var(--primary); }
+
+/* View toggle */
+.view-toggle {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    background: #f1f5f9;
+    border-radius: 8px;
+    padding: 3px;
+    width: fit-content;
+}
+.view-btn {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all .15s;
+}
+.view-btn.active {
+    background: white;
+    color: var(--text);
+    box-shadow: 0 1px 3px rgba(0,0,0,.1);
+}
+.view-btn:hover:not(.active) { color: var(--text); }
+
+/* Planner list */
+.planner-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/* Planner row — one per therapist/client */
+.planner-row {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    box-shadow: var(--shadow);
+}
+
+.planner-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    gap: 12px;
+}
+
+.planner-name {
+    font-weight: 700;
+    font-size: .95rem;
+}
+
+.planner-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: .8rem;
+}
+
+.planner-day-hours {
+    color: var(--text-muted);
+}
+
+.planner-weekly {
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: .75rem;
+}
+.planner-weekly.status-ok { background: #f0fdf4; color: #15803d; }
+.planner-weekly.status-warn { background: #fef3c7; color: #92400e; }
+.planner-weekly.status-over { background: #fee2e2; color: #991b1b; }
+
+/* Cards row — horizontal scroll on mobile */
+.planner-cards {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+}
+
+/* Individual assignment card */
+.planner-card {
+    flex-shrink: 0;
+    min-width: 150px;
+    max-width: 200px;
+    background: #f8fafc;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: .8rem;
+    transition: transform .1s, box-shadow .1s;
+    cursor: default;
+}
+.planner-card[data-id] { cursor: pointer; }
+.planner-card[data-id]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,.12);
+    background: #f1f5f9;
+}
+.planner-card:not([data-id]):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+
+.card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    gap: 6px;
+}
+
+.card-client {
+    font-weight: 700;
+    font-size: .85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.card-therapist {
+    font-weight: 600;
+    font-size: .8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+}
+
+.card-loc {
+    font-size: .6rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+.loc-home { background: #dbeafe; color: #1d4ed8; }
+.loc-clinic { background: #f0fdf4; color: #15803d; }
+
+.card-time {
+    font-weight: 600;
+    font-size: .8rem;
+    color: var(--text);
+    margin-bottom: 2px;
+}
+
+.card-detail {
+    font-size: .7rem;
+    color: var(--text-muted);
+}
+
+/* === Hours Sidebar === */
+.hours-sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 14px;
+    box-shadow: var(--shadow);
+    max-height: calc(100vh - 180px);
+    overflow-y: auto;
+    position: sticky;
+    top: calc(var(--nav-height) + 20px);
+    align-self: flex-start;
+}
+.hours-sidebar h3 {
+    font-size: .85rem;
+    margin-bottom: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    font-size: .7rem;
+}
+
+.hours-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: .75rem;
+    border-bottom: 1px solid #f8fafc;
+}
+.hours-item:last-child { border-bottom: none; }
+
+.hours-item-name {
+    width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 0;
+    color: var(--text);
+}
+
+.hours-item-bar {
+    flex: 1;
+    height: 4px;
+    background: #f1f5f9;
+    border-radius: 2px;
+    overflow: hidden;
+}
+.hours-item-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width .3s;
+}
+.hours-item-bar-fill.green { background: #22c55e; }
+.hours-item-bar-fill.yellow { background: #f59e0b; }
+.hours-item-bar-fill.red { background: #ef4444; }
+
+.hours-item-value {
+    font-weight: 700;
+    white-space: nowrap;
+    width: 42px;
+    text-align: right;
+    flex-shrink: 0;
+}
+.hours-item-value.green { color: #16a34a; }
+.hours-item-value.yellow { color: #d97706; }
+.hours-item-value.red { color: #dc2626; }
+
+/* Schedule container layout with sidebar */
+#page-schedule .page-content-wrapper {
+    display: flex;
+    gap: 16px;
+}
+
+/* Flex layout: content + sidebar */
+.schedule-layout {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+#schedule-container {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Empty state */
+.schedule-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+    font-size: .95rem;
+    background: var(--surface);
+    border-radius: var(--radius);
+}
+
+/* === Color Legend === */
+.color-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: .72rem;
+    color: var(--text);
+    white-space: nowrap;
+}
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+/* === Drag and Drop === */
+.drag-ghost {
+    opacity: .4;
+}
+.drag-chosen {
+    box-shadow: 0 4px 16px rgba(0,0,0,.15);
+    transform: scale(1.02);
+}
+.drag-active {
+    opacity: .9;
+    cursor: grabbing !important;
+}
+.drag-saving {
+    opacity: .6;
+    pointer-events: none;
+}
+
+/* Drag handle hint */
+.planner-card[data-id] {
+    cursor: grab;
+    position: relative;
+}
+.planner-card[data-id]:active {
+    cursor: grabbing;
+}
+
+/* Drop zone highlight when dragging */
+.planner-cards {
+    min-height: 50px;
+    transition: background .15s;
+    border-radius: 6px;
+    padding: 2px;
+}
+.planner-cards.sortable-drag-over {
+    background: #eff6ff;
+}
+
+/* Undo hint */
+.undo-hint {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    background: var(--text);
+    color: white;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: .8rem;
+    box-shadow: var(--shadow-lg);
+    z-index: 50;
+    animation: fadeIn .2s;
+}
+.undo-hint kbd {
+    background: rgba(255,255,255,.2);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: .75rem;
+}
+
+/* === Responsive === */
+@media (max-width: 1024px) {
+    .hours-sidebar { display: none; }
+    .schedule-layout { flex-direction: column; }
+}
+
+@media (max-width: 768px) {
+    .planner-row { padding: 10px 12px; }
+    .planner-header { flex-direction: column; align-items: flex-start; gap: 4px; }
+    .planner-card { min-width: 120px; max-width: 160px; padding: 6px 8px; }
+    .planner-cards { gap: 6px; }
+    .card-client, .card-therapist { font-size: .75rem; }
+    .card-time { font-size: .7rem; }
+    .card-detail { font-size: .6rem; }
+    .view-toggle { width: 100%; }
+    .view-btn { flex: 1; text-align: center; }
+    .filter-bar { flex-direction: column; }
+    .filter-select { max-width: 100%; min-width: 0; }
+    .schedule-toolbar { gap: 8px; }
+    .day-tabs { gap: 2px; }
+    .day-tab { padding: 6px 12px; font-size: .8rem; }
+}

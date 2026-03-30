@@ -95,7 +95,7 @@ def parse_days_string(s: str) -> tuple:
 
     s = s.replace('/', ', ')
 
-    range_m = re.match(r'^(\w+)\s*[-–]\s*(\w+)\s*$', s.strip())
+    range_m = re.match(r'^(\w+)\s*[-\u2013]\s*(\w+)\s*$', s.strip())
     if range_m:
         days = expand_day_range(range_m.group(1), range_m.group(2))
         if days:

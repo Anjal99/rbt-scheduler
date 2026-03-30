@@ -5,7 +5,7 @@ Checks individual assignments and full schedules against all rules.
 
 import pandas as pd
 from datetime import time
-from utils.time_helpers import time_to_minutes, format_time, DAYS_ORDER
+from server.utils.time_helpers import time_to_minutes, format_time, DAYS_ORDER
 
 BREAK_MINUTES = 30
 MAX_CHAIN_HOURS = 4.0
@@ -18,11 +18,16 @@ def _safe_time(val):
     """Convert a value to time, handling strings and None."""
     if isinstance(val, time):
         return val
+    if isinstance(val, str) and ':' in val:
+        try:
+            parts = val.split(':')
+            return time(int(parts[0]), int(parts[1]))
+        except (ValueError, IndexError):
+            pass
     return None
 
 
 def check_overlaps(assignments_df: pd.DataFrame) -> list:
-    """Check for therapist double-bookings."""
     flags = []
     for therapist in assignments_df['Therapist'].unique():
         for day in DAYS_ORDER:
@@ -51,7 +56,6 @@ def check_overlaps(assignments_df: pd.DataFrame) -> list:
 
 
 def check_chains(assignments_df: pd.DataFrame) -> list:
-    """Check for continuous chains exceeding 4h without a 30-min break."""
     flags = []
     for therapist in assignments_df['Therapist'].unique():
         for day in DAYS_ORDER:
@@ -94,7 +98,6 @@ def check_chains(assignments_df: pd.DataFrame) -> list:
 
 
 def check_workloads(assignments_df: pd.DataFrame, therapists_df: pd.DataFrame = None) -> list:
-    """Check therapist weekly workload against caps."""
     flags = []
     for therapist in assignments_df['Therapist'].unique():
         td = assignments_df[assignments_df['Therapist'] == therapist]
@@ -115,9 +118,9 @@ def check_workloads(assignments_df: pd.DataFrame, therapists_df: pd.DataFrame = 
                     pref_max = float(pm)
 
         if weekly >= FORTY_CAP and not forty_ok:
-            flags.append({'severity': 'Critical', 'rule': 'Workload', 'who': therapist, 'day': '', 'detail': f"{weekly:.1f}h — NOT 40h eligible"})
+            flags.append({'severity': 'Critical', 'rule': 'Workload', 'who': therapist, 'day': '', 'detail': f"{weekly:.1f}h -- NOT 40h eligible"})
         elif weekly >= FORTY_CAP:
-            flags.append({'severity': 'Warning', 'rule': '40h', 'who': therapist, 'day': '', 'detail': f"{weekly:.1f}h — verify 2h mid-day break"})
+            flags.append({'severity': 'Warning', 'rule': '40h', 'who': therapist, 'day': '', 'detail': f"{weekly:.1f}h -- verify 2h mid-day break"})
         elif weekly >= HARD_CAP:
             flags.append({'severity': 'Warning', 'rule': 'Workload', 'who': therapist, 'day': '', 'detail': f"{weekly:.1f}h (hard cap {HARD_CAP}h)"})
         elif weekly >= SOFT_CAP:
@@ -141,17 +144,70 @@ def validate_schedule(assignments_df: pd.DataFrame,
     flags.extend(check_chains(assignments_df))
     flags.extend(check_workloads(assignments_df, therapists_df))
 
-    # Coverage check
     if clients_df is not None and not clients_df.empty:
+        from server.utils.time_helpers import parse_days_string
         for _, crow in clients_df.iterrows():
             cn = str(crow.get('Name', crow.get('name', ''))).strip()
-            if cn and cn not in ('', 'nan') and assignments_df[assignments_df['Client'] == cn].empty:
+            if not cn or cn in ('', 'nan'):
+                continue
+
+            client_assignments = assignments_df[assignments_df['Client'] == cn]
+
+            if client_assignments.empty:
+                flags.append({
+                    'severity': 'Critical',
+                    'rule': 'Unscheduled',
+                    'who': cn,
+                    'day': '',
+                    'detail': 'Client has NO assignments at all',
+                })
+                continue
+
+            # Check for missing days
+            days_str = str(crow.get('Days', crow.get('days', ''))).strip()
+            needed_days, _ = parse_days_string(days_str)
+            assigned_days = set(client_assignments['Day'].unique())
+            missing = [d for d in needed_days if d not in assigned_days]
+            if missing:
                 flags.append({
                     'severity': 'Error',
                     'rule': 'Coverage',
                     'who': cn,
-                    'day': '',
-                    'detail': 'Client has no assignments',
+                    'day': ', '.join(missing),
+                    'detail': f"Client missing coverage on {', '.join(missing)}",
                 })
+
+            # Check per-day hours: assigned vs needed
+            schedule_str = str(crow.get('Schedule Needed', crow.get('schedule_needed', ''))).strip()
+            if schedule_str and schedule_str not in ('', 'nan', 'None'):
+                from server.utils.scheduler_engine import parse_client_schedule
+                needed_schedule = parse_client_schedule(schedule_str, needed_days)
+
+                for day in needed_days:
+                    if day not in needed_schedule:
+                        continue
+                    need = needed_schedule[day]
+                    need_mins = time_to_minutes(need.end) - time_to_minutes(need.start)
+
+                    day_a = client_assignments[client_assignments['Day'] == day]
+                    assigned_mins = 0
+                    for _, r in day_a.iterrows():
+                        s = _safe_time(r['Start'])
+                        e = _safe_time(r['End'])
+                        if s and e:
+                            assigned_mins += time_to_minutes(e) - time_to_minutes(s)
+
+                    gap_mins = need_mins - assigned_mins
+                    if gap_mins >= 15:
+                        gap_hrs = gap_mins / 60
+                        need_hrs = need_mins / 60
+                        assigned_hrs = assigned_mins / 60
+                        flags.append({
+                            'severity': 'Warning',
+                            'rule': 'Coverage Gap',
+                            'who': cn,
+                            'day': day,
+                            'detail': f"Needs {need_hrs:.1f}h but only {assigned_hrs:.1f}h assigned ({gap_hrs:.1f}h short)",
+                        })
 
     return flags

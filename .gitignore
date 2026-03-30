@@ -1,7 +1,7 @@
 __pycache__/
 *.pyc
 .DS_Store
-data/therapists.db
+server/data/*.db
 data/*.db
 ~$*
 *.swp
@@ -9,7 +9,5 @@ data/*.db
 .env.*
 *.xlsx
 *.docx
-*.md
-!requirements.txt
 secrets.toml
-.streamlit/secrets.toml
+.streamlit/

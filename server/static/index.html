@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RBT Scheduler</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/schedule.css">
+</head>
+<body>
+    <!-- Top nav (desktop) -->
+    <nav class="top-nav">
+        <div class="nav-brand">RBT Scheduler</div>
+        <div class="nav-links">
+            <a href="#dashboard" class="nav-link active" data-page="dashboard">Dashboard</a>
+            <a href="#schedule" class="nav-link" data-page="schedule">Schedule</a>
+            <a href="#therapists" class="nav-link" data-page="therapists">Therapists</a>
+            <a href="#clients" class="nav-link" data-page="clients">Clients</a>
+            <a href="#validation" class="nav-link" data-page="validation">Validation</a>
+        </div>
+        <div class="nav-user" id="nav-user"></div>
+    </nav>
+
+    <!-- Main content -->
+    <main id="app">
+        <!-- Dashboard page -->
+        <section id="page-dashboard" class="page active">
+            <div class="page-header">
+                <h1>Dashboard</h1>
+                <div class="page-actions">
+                    <label class="btn btn-secondary" id="upload-btn">
+                        Upload Excel
+                        <input type="file" accept=".xlsx,.xls" id="upload-file" hidden>
+                    </label>
+                    <button class="btn btn-secondary" id="reset-btn">Reset All</button>
+                    <button class="btn btn-primary" id="generate-btn">Generate Schedule</button>
+                </div>
+            </div>
+            <!-- Upload status -->
+            <div id="upload-status" class="upload-status" style="display:none"></div>
+            <div class="stats-grid" id="dashboard-stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-therapists">--</div>
+                    <div class="stat-label">Therapists</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-clients">--</div>
+                    <div class="stat-label">Clients</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-assignments">--</div>
+                    <div class="stat-label">Assignments</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-hours">--</div>
+                    <div class="stat-label">Hours</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-coverage">--</div>
+                    <div class="stat-label">Coverage</div>
+                </div>
+                <div class="stat-card" id="stat-warnings-card">
+                    <div class="stat-value" id="stat-warnings">--</div>
+                    <div class="stat-label">Warnings</div>
+                </div>
+            </div>
+            <div id="dashboard-warnings" class="warnings-panel" style="display:none">
+                <h3>Warnings</h3>
+                <div id="warnings-list"></div>
+            </div>
+        </section>
+
+        <!-- Schedule page -->
+        <section id="page-schedule" class="page">
+            <div class="page-header">
+                <h1>Schedule</h1>
+                <div class="page-actions">
+                    <button class="btn btn-primary btn-sm" id="add-assignment-btn">+ Add Assignment</button>
+                    <button class="btn btn-sm btn-secondary" id="export-excel-btn">Export Excel</button>
+                </div>
+            </div>
+            <div class="schedule-toolbar">
+                <div class="day-tabs" id="day-tabs">
+                    <button class="day-tab active" data-day="Mon">Mon</button>
+                    <button class="day-tab" data-day="Tue">Tue</button>
+                    <button class="day-tab" data-day="Wed">Wed</button>
+                    <button class="day-tab" data-day="Thu">Thu</button>
+                    <button class="day-tab" data-day="Fri">Fri</button>
+                    <button class="day-tab" data-day="Sat">Sat</button>
+                </div>
+                <div class="filter-bar">
+                    <select id="filter-therapist" class="filter-select">
+                        <option value="">All Therapists</option>
+                    </select>
+                    <select id="filter-client" class="filter-select">
+                        <option value="">All Clients</option>
+                    </select>
+                </div>
+            </div>
+            <div class="schedule-layout">
+                <div class="schedule-container" id="schedule-container">
+                    <div class="schedule-empty">No schedule generated yet. Go to Dashboard to generate.</div>
+                </div>
+                <!-- Therapist hours sidebar -->
+                <div class="hours-sidebar" id="hours-sidebar">
+                    <h3>Therapist Hours</h3>
+                    <div id="hours-list"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Therapists page -->
+        <section id="page-therapists" class="page">
+            <div class="page-header">
+                <h1>Therapists</h1>
+                <div class="page-actions">
+                    <button class="btn btn-primary btn-sm" id="add-therapist-btn">+ Add Therapist</button>
+                </div>
+            </div>
+            <div id="therapists-content"></div>
+        </section>
+
+        <!-- Therapist Add/Edit Modal -->
+        <div id="therapist-modal-overlay" class="modal-overlay" style="display:none">
+            <div class="modal">
+                <div class="modal-header">
+                    <h2 id="therapist-modal-title">Add Therapist</h2>
+                    <button class="modal-close" id="therapist-modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1">
+                            <label>Name</label>
+                            <input type="text" id="tm-name" class="form-input" placeholder="Full name">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Days Available</label>
+                            <input type="text" id="tm-days" class="form-input" value="Mon - Fri" placeholder="Mon - Fri">
+                        </div>
+                        <div class="form-group">
+                            <label>Hours Available</label>
+                            <input type="text" id="tm-hours" class="form-input" value="8am - 5pm" placeholder="8am - 5pm">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>In-Home</label>
+                            <select id="tm-inhome" class="form-select">
+                                <option value="Yes">Yes</option>
+                                <option value="No">No</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>40h Eligible</label>
+                            <select id="tm-forty" class="form-select">
+                                <option value="yes">Yes</option>
+                                <option value="No">No</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Preferred Max Hours</label>
+                            <input type="number" id="tm-prefmax" class="form-input" placeholder="e.g. 35">
+                        </div>
+                        <div class="form-group">
+                            <label>Notes</label>
+                            <input type="text" id="tm-notes" class="form-input" placeholder="Optional">
+                        </div>
+                    </div>
+                    <div id="therapist-modal-error" class="modal-validation has-errors" style="display:none"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-danger" id="tm-delete" style="display:none">Delete</button>
+                    <div class="modal-footer-right">
+                        <button class="btn btn-secondary" id="tm-cancel">Cancel</button>
+                        <button class="btn btn-primary" id="tm-save">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Clients page -->
+        <section id="page-clients" class="page">
+            <div class="page-header">
+                <h1>Clients</h1>
+            </div>
+            <div id="clients-content"></div>
+        </section>
+
+        <!-- Validation page -->
+        <section id="page-validation" class="page">
+            <div class="page-header">
+                <h1>Validation</h1>
+                <div class="page-actions">
+                    <button class="btn btn-primary" id="validate-btn">Run Validation</button>
+                </div>
+            </div>
+            <div class="stats-grid" id="validation-stats"></div>
+            <div id="validation-content"></div>
+        </section>
+    </main>
+
+    <!-- Bottom nav (mobile) -->
+    <nav class="bottom-nav">
+        <a href="#dashboard" class="bottom-link active" data-page="dashboard">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            <span>Dashboard</span>
+        </a>
+        <a href="#schedule" class="bottom-link" data-page="schedule">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span>Schedule</span>
+        </a>
+        <a href="#therapists" class="bottom-link" data-page="therapists">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Team</span>
+        </a>
+        <a href="#clients" class="bottom-link" data-page="clients">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span>Clients</span>
+        </a>
+        <a href="#validation" class="bottom-link" data-page="validation">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            <span>Validate</span>
+        </a>
+    </nav>
+
+    <!-- Assignment Edit Modal -->
+    <div id="modal-overlay" class="modal-overlay" style="display:none">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="modal-title">Edit Assignment</h2>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Client</label>
+                        <select id="modal-client" class="form-select"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Therapist</label>
+                        <select id="modal-therapist" class="form-select"></select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Day</label>
+                        <select id="modal-day" class="form-select">
+                            <option value="Mon">Monday</option>
+                            <option value="Tue">Tuesday</option>
+                            <option value="Wed">Wednesday</option>
+                            <option value="Thu">Thursday</option>
+                            <option value="Fri">Friday</option>
+                            <option value="Sat">Saturday</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Location</label>
+                        <select id="modal-location" class="form-select">
+                            <option value="Clinic">Clinic</option>
+                            <option value="Home">Home</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Start Time</label>
+                        <input type="time" id="modal-start" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>End Time</label>
+                        <input type="time" id="modal-end" class="form-input">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group" style="flex:1">
+                        <label>Type</label>
+                        <select id="modal-type" class="form-select">
+                            <option value="Recurring">Recurring</option>
+                            <option value="Float">Float</option>
+                        </select>
+                    </div>
+                </div>
+                <!-- Validation feedback -->
+                <div id="modal-validation" class="modal-validation" style="display:none"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" id="modal-delete" style="display:none">Delete</button>
+                <div class="modal-footer-right">
+                    <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+                    <button class="btn btn-primary" id="modal-save">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toast-container"></div>
+
+    <!-- Loading overlay -->
+    <div id="loading" class="loading-overlay" style="display:none">
+        <div class="spinner"></div>
+        <div class="loading-text">Generating schedule...</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/schedule-view.js"></script>
+    <script src="js/therapist-view.js"></script>
+    <script src="js/client-view.js"></script>
+    <script src="js/validation-view.js"></script>
+    <script src="js/modal.js"></script>
+    <script src="js/schedule-drag.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

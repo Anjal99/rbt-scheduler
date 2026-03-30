@@ -1,5 +1,5 @@
 """
-Scheduling engine — refactored from scheduler.py to work with DataFrames.
+Scheduling engine -- works with DataFrames.
 Takes therapist and client DataFrames, returns assignment DataFrame.
 """
 
@@ -9,12 +9,12 @@ from dataclasses import dataclass
 from datetime import time
 from typing import Optional
 
-from utils.time_helpers import (
+from server.utils.time_helpers import (
     parse_time, time_to_minutes, minutes_to_time, format_time_short,
     parse_days_string, format_days_list, normalize_day, DAYS_ORDER, WEEKDAYS, DAYS_SET
 )
 
-# ── Constants ────────────────────────────────────────────────────────────────
+# -- Constants ----------------------------------------------------------------
 
 SOFT_CAP = 30.0
 HARD_CAP = 35.0
@@ -25,7 +25,7 @@ HIGH_INTENSITY_MAX = 3.0
 LOW_INTENSITY_MAX = 4.0
 
 
-# ── Data Structures ──────────────────────────────────────────────────────────
+# -- Data Structures ----------------------------------------------------------
 
 @dataclass
 class TimeBlock:
@@ -95,10 +95,10 @@ class Assignment:
         return (time_to_minutes(self.end) - time_to_minutes(self.start)) / 60.0
 
 
-# ── Parsing Helpers ──────────────────────────────────────────────────────────
+# -- Parsing Helpers ----------------------------------------------------------
 
 def _extract_days_and_time(seg: str, default_days: list) -> tuple:
-    time_pattern = r'(\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*[-–]\s*\d{1,2}(?::\d{2})?\s*(?:am|pm))'
+    time_pattern = r'(\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*[-\u2013]\s*\d{1,2}(?::\d{2})?\s*(?:am|pm))'
     m = re.search(time_pattern, seg, re.IGNORECASE)
     if not m:
         return (default_days, None)
@@ -106,10 +106,9 @@ def _extract_days_and_time(seg: str, default_days: list) -> tuple:
     prefix = seg[:m.start()].strip()
     if not prefix:
         return (default_days, time_part)
-    range_m = re.match(r'^(\w+)\s*[-–]\s*(\w+)$', prefix.strip())
+    range_m = re.match(r'^(\w+)\s*[-\u2013]\s*(\w+)$', prefix.strip())
     if range_m:
-        from utils.time_helpers import expand_day_range
-        days = expand_day_range(range_m.group(1), range_m.group(2))
+        days = expand_day_range_local(range_m.group(1), range_m.group(2))
         if days:
             return (days, time_part)
     day_tokens = re.findall(r'[A-Za-z]+', prefix)
@@ -119,9 +118,14 @@ def _extract_days_and_time(seg: str, default_days: list) -> tuple:
     return (default_days, time_part)
 
 
+def expand_day_range_local(start_day, end_day):
+    from server.utils.time_helpers import expand_day_range
+    return expand_day_range(start_day, end_day)
+
+
 def _parse_time_range(s: str) -> Optional[TimeBlock]:
     s = s.strip()
-    parts = re.split(r'\s*[-–]\s*', s)
+    parts = re.split(r'\s*[-\u2013]\s*', s)
     if len(parts) != 2:
         return None
     try:
@@ -210,13 +214,10 @@ def parse_float_notes(notes: str) -> tuple:
     return (True, target, max_h)
 
 
-# ── DataFrame → Internal Model ──────────────────────────────────────────────
+# -- DataFrame to Internal Model ----------------------------------------------
 
 def df_to_therapists(df: pd.DataFrame) -> list:
-    """Convert therapists DataFrame to list of Therapist objects."""
     therapists = []
-    col_map = {c.lower().replace(' ', '_').replace('(', '').replace(')', '').replace(',', ''): c for c in df.columns}
-
     for _, row in df.iterrows():
         name = str(row.get('name', row.get('Name', ''))).strip()
         if not name or name in ('', 'nan', 'None'):
@@ -264,9 +265,7 @@ def df_to_therapists(df: pd.DataFrame) -> list:
 
 
 def df_to_clients(df: pd.DataFrame) -> list:
-    """Convert clients DataFrame to list of Client objects."""
     clients = []
-
     for _, row in df.iterrows():
         name = str(row.get('Name', row.get('name', ''))).strip()
         if not name or name in ('', 'nan', 'None'):
@@ -308,7 +307,7 @@ def df_to_clients(df: pd.DataFrame) -> list:
     return clients
 
 
-# ── Scheduling Logic ─────────────────────────────────────────────────────────
+# -- Scheduling Logic ----------------------------------------------------------
 
 def time_add_minutes(t: time, mins: int) -> time:
     return minutes_to_time(time_to_minutes(t) + mins)
@@ -419,6 +418,9 @@ def score_therapist(t: Therapist, client: Client, day: str,
         score -= 40
     if weekly >= HARD_CAP:
         score -= 200
+    elif weekly >= HARD_CAP - 2:
+        # Strong penalty when within 2h of hard cap to spread load
+        score -= 150
     elif weekly >= SOFT_CAP:
         score -= 20
     return score
@@ -442,12 +444,14 @@ def try_assign_slot(client, day, remaining_start, remaining_end,
         if t.is_float and t.direct_max and weekly >= t.direct_max:
             continue
         if not relaxed:
-            if not t.forty_hour_eligible and weekly >= HARD_CAP:
-                continue
-            if weekly >= FORTY_CAP:
+            # Normal mode: enforce 35h cap for everyone
+            if weekly >= HARD_CAP:
                 continue
         else:
-            if weekly >= FORTY_CAP:
+            # Relaxed mode: allow 40h-eligible to go up to 40h, others stay at 35h
+            if not t.forty_hour_eligible and weekly >= HARD_CAP:
+                continue
+            if t.forty_hour_eligible and weekly >= FORTY_CAP:
                 continue
 
         free_slots = find_free_slots(t.name, day, timelines, assignments)
@@ -483,6 +487,20 @@ def try_assign_slot(client, day, remaining_start, remaining_end,
             if not travel_buffer_ok(t.name, day, capped.start, capped.end, day_loc, assignments):
                 continue
 
+            # Projected hours check for single-day assignment
+            cap_limit = FORTY_CAP if (relaxed and t.forty_hour_eligible) else HARD_CAP
+            if weekly + capped.duration_hours() > cap_limit:
+                max_mins = int((cap_limit - weekly) * 60)
+                if max_mins < 15:
+                    continue
+                capped_mins_adj = min(capped.duration_minutes(), max_mins)
+                capped_end_adj = time_add_minutes(capped.start, capped_mins_adj)
+                if time_to_minutes(capped_end_adj) > time_to_minutes(capped.end):
+                    capped_end_adj = capped.end
+                capped = TimeBlock(capped.start, capped_end_adj)
+                if capped.duration_minutes() < 15:
+                    continue
+
             s = score_therapist(t, client, day, capped, assignments)
             if s > best_score:
                 best_score = s
@@ -507,20 +525,13 @@ def try_assign_slot(client, day, remaining_start, remaining_end,
     return None
 
 
-# ── Main Entry Point ─────────────────────────────────────────────────────────
+# -- Main Entry Point ----------------------------------------------------------
 
 def _find_common_free_slot(therapist, days, need_start, need_end, timelines, assignments):
-    """
-    Find the largest free slot for a therapist that is available on ALL given days.
-    Returns a TimeBlock or None.
-    """
-    # Get free slots for each day
     per_day_free = {}
     for d in days:
         per_day_free[d] = find_free_slots(therapist.name, d, timelines, assignments)
 
-    # Find the intersection of free time across all days
-    # Start with the need range and intersect with each day's free slots
     candidates = [TimeBlock(need_start, need_end)]
 
     for d in days:
@@ -535,7 +546,6 @@ def _find_common_free_slot(therapist, days, need_start, need_end, timelines, ass
         if not candidates:
             return None
 
-    # Return the largest candidate
     if candidates:
         return max(candidates, key=lambda c: c.duration_minutes())
     return None
@@ -543,49 +553,41 @@ def _find_common_free_slot(therapist, days, need_start, need_end, timelines, ass
 
 def try_assign_multi_day(client, days, remaining_start, remaining_end,
                          therapists, timelines, assignments, relaxed=False):
-    """
-    Try to find a therapist who can cover the same time slot on ALL given days.
-    Returns (therapist, capped_block) or (None, None).
-    """
     intensity_max = HIGH_INTENSITY_MAX if client.intensity == 'High' else LOW_INTENSITY_MAX
     best_t = None
     best_block = None
     best_score = -9999
 
     for t in therapists:
-        # Must be available on all days
         if not all(d in t.days for d in days):
             continue
 
-        # Location check (use first day's location as representative)
         day_loc = client.location_by_day.get(days[0], 'Clinic')
         if day_loc == 'Home' and not t.in_home:
             continue
 
-        # Workload check — estimate hours that would be added (slot * num_days)
         weekly = therapist_weekly_hours(t.name, assignments)
         if t.is_float and t.direct_max and weekly >= t.direct_max:
             continue
         if not relaxed:
-            if not t.forty_hour_eligible and weekly >= HARD_CAP:
-                continue
-            if weekly >= FORTY_CAP:
+            # Normal mode: enforce 35h cap for everyone
+            if weekly >= HARD_CAP:
                 continue
         else:
-            if weekly >= FORTY_CAP:
+            # Relaxed mode: allow 40h-eligible to go up to 40h, others stay at 35h
+            if not t.forty_hour_eligible and weekly >= HARD_CAP:
+                continue
+            if t.forty_hour_eligible and weekly >= FORTY_CAP:
                 continue
 
-        # Find common free slot across all days
         common = _find_common_free_slot(t, days, remaining_start, remaining_end,
                                          timelines, assignments)
         if not common or common.duration_minutes() < 15:
             continue
 
-        # Cap by intensity
         max_mins = int(intensity_max * 60)
         capped_mins = min(common.duration_minutes(), max_mins)
 
-        # Cap by chain limit on each day
         for d in days:
             test_end = time_add_minutes(common.start, capped_mins)
             if time_to_minutes(test_end) > time_to_minutes(common.end):
@@ -609,7 +611,22 @@ def try_assign_multi_day(client, days, remaining_start, remaining_end,
             capped_end = common.end
         capped = TimeBlock(common.start, capped_end)
 
-        # Travel buffer check on all days
+        # Projected hours check: block * num_days must not exceed cap
+        added_hours = capped.duration_hours() * len(days)
+        cap_limit = FORTY_CAP if (relaxed and t.forty_hour_eligible) else HARD_CAP
+        if weekly + added_hours > cap_limit:
+            # Shrink block to fit within cap
+            max_per_day_mins = int((cap_limit - weekly) / len(days) * 60)
+            if max_per_day_mins < 15:
+                continue
+            capped_mins = min(capped.duration_minutes(), max_per_day_mins)
+            capped_end = time_add_minutes(common.start, capped_mins)
+            if time_to_minutes(capped_end) > time_to_minutes(common.end):
+                capped_end = common.end
+            capped = TimeBlock(common.start, capped_end)
+            if capped.duration_minutes() < 15:
+                continue
+
         all_travel_ok = True
         for d in days:
             d_loc = client.location_by_day.get(d, 'Clinic')
@@ -619,9 +636,7 @@ def try_assign_multi_day(client, days, remaining_start, remaining_end,
         if not all_travel_ok:
             continue
 
-        # Score (use first day as representative)
         s = score_therapist(t, client, days[0], capped, assignments)
-        # Bonus for covering more days consistently
         s += len(days) * 5
 
         if s > best_score:
@@ -635,14 +650,11 @@ def try_assign_multi_day(client, days, remaining_start, remaining_end,
 def generate_schedule(therapists_df: pd.DataFrame,
                       clients_df: pd.DataFrame) -> tuple:
     """
-    Main entry point. Generates a CONSISTENT weekly schedule where the same
-    therapist covers the same time slot across all of a client's days.
-    Returns (assignments_df, warnings_list, stats_dict).
+    Main entry point. Returns (assignments_df, warnings_list, stats_dict).
     """
     therapists = df_to_therapists(therapists_df)
     clients = df_to_clients(clients_df)
 
-    # Build timelines
     timelines = {}
     for t in therapists:
         day_blocks = {}
@@ -653,7 +665,6 @@ def generate_schedule(therapists_df: pd.DataFrame,
     assignments = []
     warnings = []
 
-    # Sort clients by difficulty
     def difficulty(c):
         total_hours = sum(tb.duration_hours() for tb in c.schedule.values())
         is_home = 1 if c.location in ('Home', 'Hybrid') else 0
@@ -662,10 +673,8 @@ def generate_schedule(therapists_df: pd.DataFrame,
 
     sorted_clients = sorted(clients, key=difficulty)
 
-    # ── Pass 1: Consistent multi-day scheduling ──
-    # Group each client's days by their time block (same start/end = same group)
+    # -- Pass 1: Consistent multi-day scheduling --
     for client in sorted_clients:
-        # Group days with identical schedule needs
         schedule_groups = {}
         for day in client.days:
             if day not in client.schedule:
@@ -688,7 +697,6 @@ def generate_schedule(therapists_df: pd.DataFrame,
                 if attempts > 30:
                     break
 
-                # Try to find a therapist available on ALL days in this group
                 best_t, best_block = try_assign_multi_day(
                     client, days, remaining_start, need_end,
                     therapists, timelines, assignments
@@ -700,7 +708,6 @@ def generate_schedule(therapists_df: pd.DataFrame,
                     )
 
                 if best_t and best_block:
-                    # Assign the SAME block to ALL days
                     for d in days:
                         d_loc = client.location_by_day.get(d, 'Clinic')
                         atype = "Recurring"
@@ -725,7 +732,7 @@ def generate_schedule(therapists_df: pd.DataFrame,
                 else:
                     break
 
-    # ── Pass 2: Fill gaps per-day (fallback for days that couldn't get consistent coverage) ──
+    # -- Pass 2: Fill gaps per-day --
     for client in sorted_clients:
         for day in client.days:
             if day not in client.schedule:
@@ -763,7 +770,7 @@ def generate_schedule(therapists_df: pd.DataFrame,
                     else:
                         break
 
-    # ── Collect warnings ──
+    # -- Collect warnings --
     for client in sorted_clients:
         for day in client.days:
             if day not in client.schedule:
@@ -787,7 +794,6 @@ def generate_schedule(therapists_df: pd.DataFrame,
                     f"{format_time_short(minutes_to_time(cursor))}-{format_time_short(need.end)}"
                 )
 
-    # Workload warnings
     for t in therapists:
         weekly = therapist_weekly_hours(t.name, assignments)
         if weekly < 0.01:
@@ -795,7 +801,7 @@ def generate_schedule(therapists_df: pd.DataFrame,
         if weekly >= FORTY_CAP and not t.forty_hour_eligible:
             warnings.append(f"CRITICAL: {t.name} at {weekly:.1f}h/week (NOT 40h eligible)")
         elif weekly >= FORTY_CAP:
-            warnings.append(f"40h: {t.name} at {weekly:.1f}h/week — verify 2h mid-day break")
+            warnings.append(f"40h: {t.name} at {weekly:.1f}h/week -- verify 2h mid-day break")
         elif weekly >= HARD_CAP:
             warnings.append(f"High workload: {t.name} at {weekly:.1f}h/week (hard cap 35h)")
         elif weekly >= SOFT_CAP:
@@ -803,7 +809,6 @@ def generate_schedule(therapists_df: pd.DataFrame,
         if t.preferred_max_hours and weekly > t.preferred_max_hours:
             warnings.append(f"Over preferred max: {t.name} at {weekly:.1f}h (pref {t.preferred_max_hours}h)")
 
-    # Build output
     total_needed = sum(tb.duration_hours() for c in clients for tb in c.schedule.values())
     total_assigned = sum(a.duration_hours() for a in assignments)
 
