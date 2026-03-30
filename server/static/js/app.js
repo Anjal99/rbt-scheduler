@@ -49,13 +49,57 @@ const App = {
         const userEl = document.getElementById('nav-user');
         if (userEl && this.currentUser) {
             userEl.innerHTML = `<span class="nav-user-name">${this.currentUser.name}</span>`;
+            userEl.innerHTML += `<button class="nav-logout" id="change-pw-btn" style="background:rgba(255,255,255,.08)">Change Password</button>`;
             if (this.currentUser.role === 'admin') {
                 userEl.innerHTML += `<a href="#users" class="nav-link" data-page="users" style="font-size:.75rem">Users</a>`;
             }
             userEl.innerHTML += `<button class="nav-logout" id="logout-btn">Logout</button>`;
+
+            document.getElementById('change-pw-btn').addEventListener('click', () => {
+                document.getElementById('pw-modal-overlay').style.display = '';
+            });
             document.getElementById('logout-btn').addEventListener('click', async () => {
                 await fetch('/api/auth/logout', { method: 'POST' });
                 window.location.href = '/login';
+            });
+
+            // Change password modal handlers
+            document.getElementById('pw-modal-close').addEventListener('click', () => {
+                document.getElementById('pw-modal-overlay').style.display = 'none';
+            });
+            document.getElementById('pw-cancel').addEventListener('click', () => {
+                document.getElementById('pw-modal-overlay').style.display = 'none';
+            });
+            document.getElementById('pw-modal-overlay').addEventListener('click', (e) => {
+                if (e.target.id === 'pw-modal-overlay') e.target.style.display = 'none';
+            });
+            document.getElementById('pw-save').addEventListener('click', async () => {
+                const newPw = document.getElementById('pw-new').value;
+                const confirmPw = document.getElementById('pw-confirm').value;
+                const errEl = document.getElementById('pw-error');
+                errEl.style.display = 'none';
+
+                if (!newPw || newPw.length < 8) {
+                    errEl.textContent = 'Password must be at least 8 characters.';
+                    errEl.style.display = '';
+                    return;
+                }
+                if (newPw !== confirmPw) {
+                    errEl.textContent = 'Passwords do not match.';
+                    errEl.style.display = '';
+                    return;
+                }
+
+                try {
+                    await API.postJSON('/api/auth/change-password', { new_password: newPw });
+                    document.getElementById('pw-modal-overlay').style.display = 'none';
+                    document.getElementById('pw-new').value = '';
+                    document.getElementById('pw-confirm').value = '';
+                    this.toast('Password changed successfully', 'success');
+                } catch (e) {
+                    errEl.textContent = 'Failed: ' + e.message;
+                    errEl.style.display = '';
+                }
             });
         }
     },
