@@ -201,6 +201,56 @@
             <div class="stats-grid" id="validation-stats"></div>
             <div id="validation-content"></div>
         </section>
+
+        <!-- Users page (admin only) -->
+        <section id="page-users" class="page">
+            <div class="page-header">
+                <h1>User Management</h1>
+                <div class="page-actions">
+                    <button class="btn btn-primary btn-sm" id="invite-user-btn">+ Invite User</button>
+                </div>
+            </div>
+            <div id="users-content"></div>
+        </section>
+
+        <!-- Invite User Modal -->
+        <div id="invite-modal-overlay" class="modal-overlay" style="display:none">
+            <div class="modal">
+                <div class="modal-header">
+                    <h2 id="invite-modal-title">Invite User</h2>
+                    <button class="modal-close" id="invite-modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Name</label>
+                            <input type="text" id="invite-name" class="form-input" placeholder="Full name">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="invite-email" class="form-input" placeholder="email@clinic.com">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Role</label>
+                            <select id="invite-role" class="form-select">
+                                <option value="staff">Staff</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="invite-result" class="modal-validation is-clean" style="display:none"></div>
+                    <div id="invite-error" class="modal-validation has-errors" style="display:none"></div>
+                </div>
+                <div class="modal-footer">
+                    <div class="modal-footer-right">
+                        <button class="btn btn-secondary" id="invite-cancel">Cancel</button>
+                        <button class="btn btn-primary" id="invite-save">Create Account</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- Bottom nav (mobile) -->
@@ -314,6 +364,7 @@
     <script src="js/validation-view.js"></script>
     <script src="js/modal.js"></script>
     <script src="js/schedule-drag.js"></script>
+    <script src="js/users-view.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

@@ -33,6 +33,9 @@ const App = {
         // Init modals
         AssignmentModal.init();
         TherapistModal.init();
+        if (this.currentUser.role === 'admin') {
+            InviteModal.init();
+        }
 
         // Handle initial hash
         const hash = location.hash.replace('#', '') || 'dashboard';
@@ -90,6 +93,7 @@ const App = {
         if (page === 'therapists') this._loadTherapists();
         if (page === 'clients') this._loadClients();
         if (page === 'validation') this._loadValidation();
+        if (page === 'users') this._loadUsers();
     },
 
     // --- Dashboard ---
@@ -288,6 +292,17 @@ const App = {
             document.getElementById('validation-content').innerHTML =
                 '<div class="empty-state">No schedule to validate. Generate a schedule first.</div>';
         }
+    },
+
+    // --- Users Page (admin) ---
+    async _loadUsers() {
+        if (this.currentUser && this.currentUser.role !== 'admin') {
+            document.getElementById('users-content').innerHTML =
+                '<div class="empty-state">Admin access required.</div>';
+            return;
+        }
+        await UsersView.load();
+        UsersView.render(document.getElementById('users-content'));
     },
 
     // --- Utilities ---
