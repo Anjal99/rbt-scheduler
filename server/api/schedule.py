@@ -157,6 +157,8 @@ def set_assignment_lock(assignment_id):
     if not data or 'lock_type' not in data:
         return jsonify({'error': 'lock_type is required'}), 400
     lock_val = data['lock_type']
+    if lock_val == '' or lock_val == 'null':
+        lock_val = None
     if lock_val not in ('hard', 'soft', None):
         return jsonify({'error': 'lock_type must be "hard", "soft", or null'}), 400
     update_assignment(assignment_id, lock_type=lock_val)
