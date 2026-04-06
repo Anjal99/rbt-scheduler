@@ -139,6 +139,22 @@ const ScheduleView = {
                 this.render(container);
             });
         });
+        // Lock toggle buttons
+        container.querySelectorAll('.lock-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation(); // Don't open modal
+                const id = parseInt(btn.dataset.assignmentId);
+                const nextLock = btn.dataset.nextLock || null;
+                try {
+                    await API.setLockType(id, nextLock);
+                    const label = nextLock === 'soft' ? 'Soft locked' : nextLock === 'hard' ? 'Hard locked' : 'Unlocked';
+                    App.toast(label, 'success');
+                    await this.refresh();
+                } catch (err) {
+                    App.toast('Lock failed: ' + err.message, 'error');
+                }
+            });
+        });
         // Card clicks → edit
         container.querySelectorAll('.planner-card[data-id]').forEach(card => {
             card.addEventListener('click', () => {
@@ -221,6 +237,16 @@ const ScheduleView = {
         return html;
     },
 
+    _lockIcon(lockType) {
+        if (lockType === 'hard') {
+            return '<svg class="card-lock card-lock-hard" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+        }
+        if (lockType === 'soft') {
+            return '<svg class="card-lock card-lock-soft" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>';
+        }
+        return '';
+    },
+
     _renderCard(a, showField) {
         const start = this.parseTime(a.Start);
         const end = this.parseTime(a.End);
@@ -230,12 +256,22 @@ const ScheduleView = {
         const locClass = locIcon === 'H' ? 'loc-home' : 'loc-clinic';
         const label = showField === 'client' ? a.Client : a.Therapist;
         const labelStyle = showField === 'client' ? ` style="color:${color}"` : '';
+        const lockType = a.LockType || '';
+        const lockedClass = lockType === 'hard' ? ' locked-hard' : lockType === 'soft' ? ' locked-soft' : '';
 
-        let html = `<div class="planner-card" data-id="${a.id || ''}" style="border-left: 4px solid ${color}">`;
+        let html = `<div class="planner-card${lockedClass}" data-id="${a.id || ''}" data-lock="${lockType}" style="border-left: 4px solid ${color}">`;
         html += `<div class="card-top">`;
         html += `<span class="${showField === 'client' ? 'card-client' : 'card-therapist'}"${labelStyle}>${label}</span>`;
+        html += `<div class="card-top-right">`;
+        html += this._lockIcon(lockType);
         html += `<span class="card-loc ${locClass}">${locIcon}</span>`;
-        html += `</div>`;
+        if (a.id) {
+            const nextLock = !lockType ? 'soft' : lockType === 'soft' ? 'hard' : null;
+            const btnTitle = !lockType ? 'Lock (soft)' : lockType === 'soft' ? 'Lock (hard)' : 'Unlock';
+            const btnIcon = !lockType ? '&#128275;' : lockType === 'soft' ? '&#128274;' : '&#128275;';
+            html += `<button class="lock-toggle-btn" data-assignment-id="${a.id}" data-next-lock="${nextLock || ''}" title="${btnTitle}">${btnIcon}</button>`;
+        }
+        html += `</div></div>`;
         html += `<div class="card-time">${this.formatTime(start)} - ${this.formatTime(end)}</div>`;
         html += `<div class="card-detail">${duration}h &middot; ${a.Type || 'Recurring'}</div>`;
         html += `</div>`;

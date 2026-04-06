@@ -4,7 +4,8 @@ import pandas as pd
 from server.utils.database import (
     get_all_therapists, get_all_clients, get_all_assignments,
     save_assignments, update_assignment, add_assignment,
-    delete_assignment, delete_all_assignments, reset_all
+    delete_assignment, delete_all_assignments, reset_all,
+    get_locked_assignments, get_assignment_by_id
 )
 from server.utils.scheduler_engine import generate_schedule
 from server.utils.validators import validate_schedule
@@ -81,9 +82,10 @@ def gen_schedule():
     if clients_df.empty:
         return jsonify({'error': 'No clients loaded. Upload clients first.'}), 400
 
-    assignments_df, warnings, stats = generate_schedule(therapists_df, clients_df)
+    locked_df = get_locked_assignments()
+    assignments_df, warnings, stats = generate_schedule(therapists_df, clients_df, locked_df)
 
-    # Save to DB
+    # Save to DB (preserves locked assignments, replaces unlocked ones)
     save_assignments(assignments_df)
 
     return jsonify({
@@ -137,8 +139,28 @@ def edit_assignment(assignment_id):
     data = request.get_json()
     if not data:
         return jsonify({'error': 'No data provided'}), 400
+
+    # Block edits on hard-locked assignments (except changing lock_type itself)
+    existing = get_assignment_by_id(assignment_id)
+    if existing and existing.get('lock_type') == 'hard':
+        non_lock_fields = {k: v for k, v in data.items() if k != 'lock_type'}
+        if non_lock_fields:
+            return jsonify({'error': 'This assignment is hard-locked. Unlock it first to make changes.'}), 403
+
     update_assignment(assignment_id, **data)
     return jsonify({'message': 'Assignment updated'})
+
+
+@schedule_bp.route('/assignment/<int:assignment_id>/lock', methods=['PATCH'])
+def set_assignment_lock(assignment_id):
+    data = request.get_json()
+    if not data or 'lock_type' not in data:
+        return jsonify({'error': 'lock_type is required'}), 400
+    lock_val = data['lock_type']
+    if lock_val not in ('hard', 'soft', None):
+        return jsonify({'error': 'lock_type must be "hard", "soft", or null'}), 400
+    update_assignment(assignment_id, lock_type=lock_val)
+    return jsonify({'message': 'Lock updated', 'lock_type': lock_val})
 
 
 @schedule_bp.route('/assignment/<int:assignment_id>', methods=['DELETE'])

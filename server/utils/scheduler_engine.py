@@ -398,7 +398,8 @@ def travel_buffer_ok(name: str, day: str, new_start: time, new_end: time,
 
 
 def score_therapist(t: Therapist, client: Client, day: str,
-                    overlap: TimeBlock, assignments: list) -> float:
+                    overlap: TimeBlock, assignments: list,
+                    soft_locked: list = None) -> float:
     score = 0.0
     weekly = therapist_weekly_hours(t.name, assignments)
     has_client = any(a.therapist == t.name and a.client == client.name for a in assignments)
@@ -423,11 +424,18 @@ def score_therapist(t: Therapist, client: Client, day: str,
         score -= 150
     elif weekly >= SOFT_CAP:
         score -= 20
+    # Soft lock bonus: strongly prefer keeping the same therapist-client-day combo
+    if soft_locked:
+        for sl in soft_locked:
+            if sl.therapist == t.name and sl.client == client.name and sl.day == day:
+                score += 200
+                break
     return score
 
 
 def try_assign_slot(client, day, remaining_start, remaining_end,
-                    therapists, timelines, assignments, relaxed=False):
+                    therapists, timelines, assignments, relaxed=False,
+                    soft_locked=None):
     remaining_block = TimeBlock(remaining_start, remaining_end)
     day_loc = client.location_by_day.get(day, 'Clinic')
     intensity_max = HIGH_INTENSITY_MAX if client.intensity == 'High' else LOW_INTENSITY_MAX
@@ -501,7 +509,7 @@ def try_assign_slot(client, day, remaining_start, remaining_end,
                 if capped.duration_minutes() < 15:
                     continue
 
-            s = score_therapist(t, client, day, capped, assignments)
+            s = score_therapist(t, client, day, capped, assignments, soft_locked)
             if s > best_score:
                 best_score = s
                 best_t = t
@@ -552,7 +560,8 @@ def _find_common_free_slot(therapist, days, need_start, need_end, timelines, ass
 
 
 def try_assign_multi_day(client, days, remaining_start, remaining_end,
-                         therapists, timelines, assignments, relaxed=False):
+                         therapists, timelines, assignments, relaxed=False,
+                         soft_locked=None):
     intensity_max = HIGH_INTENSITY_MAX if client.intensity == 'High' else LOW_INTENSITY_MAX
     best_t = None
     best_block = None
@@ -636,7 +645,7 @@ def try_assign_multi_day(client, days, remaining_start, remaining_end,
         if not all_travel_ok:
             continue
 
-        s = score_therapist(t, client, days[0], capped, assignments)
+        s = score_therapist(t, client, days[0], capped, assignments, soft_locked)
         s += len(days) * 5
 
         if s > best_score:
@@ -647,10 +656,39 @@ def try_assign_multi_day(client, days, remaining_start, remaining_end,
     return best_t, best_block
 
 
+def _locked_df_to_assignments(locked_df: pd.DataFrame) -> list:
+    """Convert locked assignments DataFrame into Assignment objects."""
+    assignments = []
+    if locked_df is None or locked_df.empty:
+        return assignments
+    for _, row in locked_df.iterrows():
+        start_val = row.get('Start', '')
+        end_val = row.get('End', '')
+        if isinstance(start_val, str):
+            start_val = parse_time(start_val) if start_val else None
+        if isinstance(end_val, str):
+            end_val = parse_time(end_val) if end_val else None
+        if not start_val or not end_val:
+            continue
+        assignments.append(Assignment(
+            client=str(row.get('Client', '')),
+            therapist=str(row.get('Therapist', '')),
+            day=str(row.get('Day', '')),
+            start=start_val,
+            end=end_val,
+            location=str(row.get('Location', 'Clinic')),
+            assignment_type=str(row.get('Type', 'Recurring')),
+            notes=str(row.get('Notes', '')),
+        ))
+    return assignments
+
+
 def generate_schedule(therapists_df: pd.DataFrame,
-                      clients_df: pd.DataFrame) -> tuple:
+                      clients_df: pd.DataFrame,
+                      locked_df: pd.DataFrame = None) -> tuple:
     """
     Main entry point. Returns (assignments_df, warnings_list, stats_dict).
+    Locked assignments (hard/soft) are pre-populated so the engine works around them.
     """
     therapists = df_to_therapists(therapists_df)
     clients = df_to_clients(clients_df)
@@ -662,7 +700,14 @@ def generate_schedule(therapists_df: pd.DataFrame,
             day_blocks[d] = list(t.availability.get(d, []))
         timelines[t.name] = day_blocks
 
-    assignments = []
+    # Pre-populate with locked assignments so the engine routes around them
+    locked_assignments = _locked_df_to_assignments(locked_df)
+    # Build soft-locked list for scoring bonus
+    soft_locked = []
+    if locked_df is not None and not locked_df.empty:
+        soft_rows = locked_df[locked_df['LockType'] == 'soft']
+        soft_locked = _locked_df_to_assignments(soft_rows)
+    assignments = list(locked_assignments)
     warnings = []
 
     def difficulty(c):
@@ -699,12 +744,14 @@ def generate_schedule(therapists_df: pd.DataFrame,
 
                 best_t, best_block = try_assign_multi_day(
                     client, days, remaining_start, need_end,
-                    therapists, timelines, assignments
+                    therapists, timelines, assignments,
+                    soft_locked=soft_locked
                 )
                 if not best_t:
                     best_t, best_block = try_assign_multi_day(
                         client, days, remaining_start, need_end,
-                        therapists, timelines, assignments, relaxed=True
+                        therapists, timelines, assignments, relaxed=True,
+                        soft_locked=soft_locked
                     )
 
                 if best_t and best_block:
@@ -761,7 +808,8 @@ def generate_schedule(therapists_df: pd.DataFrame,
                     if attempts > 15:
                         break
                     result = try_assign_slot(client, day, remaining_start, gap_end,
-                                             therapists, timelines, assignments, relaxed=True)
+                                             therapists, timelines, assignments, relaxed=True,
+                                             soft_locked=soft_locked)
                     if result:
                         result.notes = f"Block {block_num} (gap fill)"
                         assignments.append(result)
@@ -822,8 +870,12 @@ def generate_schedule(therapists_df: pd.DataFrame,
         'warnings_count': len(warnings),
     }
 
+    # Only output engine-generated assignments (not locked ones already in DB)
+    num_locked = len(locked_assignments)
+    new_assignments = assignments[num_locked:]
+
     rows = []
-    for a in assignments:
+    for a in new_assignments:
         rows.append({
             'Client': a.client,
             'Therapist': a.therapist,

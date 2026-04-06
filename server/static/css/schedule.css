@@ -304,6 +304,65 @@
     flex-shrink: 0;
 }
 
+/* === Lock Indicators === */
+.locked-hard {
+    background: #fef3c7 !important;
+    border: 2px solid #d97706 !important;
+    cursor: not-allowed !important;
+}
+.locked-hard:hover {
+    transform: none !important;
+    cursor: not-allowed !important;
+}
+.locked-soft {
+    background: #eff6ff !important;
+    border: 2px solid #60a5fa !important;
+}
+
+.card-top-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.card-lock {
+    flex-shrink: 0;
+}
+.card-lock-hard {
+    color: #d97706;
+}
+.card-lock-soft {
+    color: #6b7280;
+}
+
+.lock-toggle-btn {
+    background: rgba(0,0,0,.05);
+    border: none;
+    cursor: pointer;
+    font-size: .7rem;
+    padding: 2px 5px;
+    border-radius: 4px;
+    opacity: .7;
+    transition: opacity .15s, background .15s;
+    line-height: 1;
+}
+.lock-toggle-btn:hover {
+    opacity: 1;
+    background: rgba(0,0,0,.12);
+}
+.locked-hard .lock-toggle-btn,
+.locked-soft .lock-toggle-btn {
+    opacity: 1;
+}
+
+/* Lock info banner in modal */
+.modal-validation.is-info {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e40af;
+}
+
 /* === Drag and Drop === */
 .drag-ghost {
     opacity: .4;

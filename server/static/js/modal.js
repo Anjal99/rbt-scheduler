@@ -53,8 +53,11 @@ const AssignmentModal = {
         return document.getElementById('modal-overlay').style.display !== 'none';
     },
 
+    _editingLockType: null,
+
     openEdit(assignment) {
         this._editingId = assignment.id;
+        this._editingLockType = assignment.LockType || null;
         document.getElementById('modal-title').textContent = 'Edit Assignment';
         document.getElementById('modal-delete').style.display = '';
 
@@ -68,13 +71,41 @@ const AssignmentModal = {
         document.getElementById('modal-end').value = ScheduleView.toInputTime(assignment.End);
 
         this._clearValidation();
+        this._applyLockState();
         this._show();
+    },
+
+    _applyLockState() {
+        const fields = ['modal-client', 'modal-therapist', 'modal-day',
+                        'modal-location', 'modal-type', 'modal-start', 'modal-end'];
+        const saveBtn = document.getElementById('modal-save');
+
+        if (this._editingLockType === 'hard') {
+            fields.forEach(id => { document.getElementById(id).disabled = true; });
+            saveBtn.style.display = 'none';
+            this._showValidation(
+                '<strong>Hard-locked.</strong> This assignment is protected. Unlock it from the schedule view to make changes.',
+                'info'
+            );
+        } else if (this._editingLockType === 'soft') {
+            fields.forEach(id => { document.getElementById(id).disabled = false; });
+            saveBtn.style.display = '';
+            this._showValidation(
+                '<strong>Soft-locked.</strong> Editing will remove the soft lock.',
+                'warnings'
+            );
+        } else {
+            fields.forEach(id => { document.getElementById(id).disabled = false; });
+            saveBtn.style.display = '';
+        }
     },
 
     openAdd() {
         this._editingId = null;
+        this._editingLockType = null;
         document.getElementById('modal-title').textContent = 'Add Assignment';
         document.getElementById('modal-delete').style.display = 'none';
+        document.getElementById('modal-save').style.display = '';
 
         // Default to current day tab
         document.getElementById('modal-day').value = ScheduleView.currentDay;
@@ -91,6 +122,11 @@ const AssignmentModal = {
 
     close() {
         document.getElementById('modal-overlay').style.display = 'none';
+        // Re-enable fields in case they were disabled by hard lock
+        ['modal-client', 'modal-therapist', 'modal-day',
+         'modal-location', 'modal-type', 'modal-start', 'modal-end'].forEach(id => {
+            document.getElementById(id).disabled = false;
+        });
     },
 
     _show() {
@@ -129,6 +165,10 @@ const AssignmentModal = {
 
         try {
             if (this._editingId) {
+                // If soft-locked, clear the lock when editing
+                if (this._editingLockType === 'soft') {
+                    data.lock_type = null;
+                }
                 await API.updateAssignment(this._editingId, data);
             } else {
                 await API.addAssignment(data);
@@ -166,7 +206,10 @@ const AssignmentModal = {
 
     async _delete() {
         if (!this._editingId) return;
-        if (!confirm('Delete this assignment?')) return;
+        const msg = this._editingLockType
+            ? `This assignment is ${this._editingLockType}-locked. Are you sure you want to delete it?`
+            : 'Delete this assignment?';
+        if (!confirm(msg)) return;
 
         try {
             await API.deleteAssignment(this._editingId);
@@ -185,6 +228,7 @@ const AssignmentModal = {
         el.className = 'modal-validation';
         if (type === 'errors') el.classList.add('has-errors');
         else if (type === 'warnings') el.classList.add('has-warnings');
+        else if (type === 'info') el.classList.add('is-info');
         else el.classList.add('is-clean');
         el.innerHTML = html;
     },

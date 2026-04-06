@@ -21,9 +21,14 @@ const ScheduleDrag = {
                 ghostClass: 'drag-ghost',
                 chosenClass: 'drag-chosen',
                 dragClass: 'drag-active',
+                filter: '.locked-hard',  // Prevent dragging hard-locked cards
                 delay: 150,           // Long-press on mobile
                 delayOnTouchOnly: true,
                 touchStartThreshold: 3,
+                onMove: (evt) => {
+                    // Block dragging hard-locked items
+                    if (evt.dragged && evt.dragged.dataset.lock === 'hard') return false;
+                },
                 onEnd: (evt) => this._onDrop(evt),
             });
             this._sortables.push(sortable);
@@ -52,6 +57,13 @@ const ScheduleDrag = {
         // Find original assignment
         const assignment = ScheduleView.assignments.find(a => a.id === assignmentId);
         if (!assignment) return;
+
+        // Block drag for hard-locked assignments
+        if (assignment.LockType === 'hard') {
+            App.toast('Cannot move a hard-locked assignment', 'error');
+            await ScheduleView.refresh();
+            return;
+        }
 
         const oldTherapist = assignment.Therapist;
 

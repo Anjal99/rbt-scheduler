@@ -66,6 +66,14 @@ const API = {
         const res = await this._fetch(`/api/schedule/assignment/${id}`, { method: 'DELETE' });
         return res.json();
     },
+    async setLockType(id, lockType) {
+        const res = await this._fetch(`/api/schedule/assignment/${id}/lock`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lock_type: lockType }),
+        });
+        return res.json();
+    },
 
     // Export
     exportExcelURL()      { return '/api/export/excel'; },

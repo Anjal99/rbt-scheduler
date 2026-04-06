@@ -63,6 +63,7 @@ def init_db():
             end_time TEXT NOT NULL,
             location TEXT DEFAULT 'Clinic',
             assignment_type TEXT DEFAULT 'Recurring',
+            lock_type TEXT DEFAULT NULL,
             notes TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -78,6 +79,12 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     ''')
+    # Add lock_type column if missing (migration for existing DBs)
+    try:
+        conn.execute("SELECT lock_type FROM assignments LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE assignments ADD COLUMN lock_type TEXT DEFAULT NULL")
+
     conn.commit()
     conn.close()
 
@@ -261,8 +268,8 @@ def get_all_assignments() -> pd.DataFrame:
     df = pd.read_sql_query(
         "SELECT id, client_name as Client, therapist_name as Therapist, day as Day, "
         "start_time as Start, end_time as End, location as Location, "
-        "assignment_type as Type, notes as Notes FROM assignments "
-        "ORDER BY day, start_time",
+        "assignment_type as Type, lock_type as LockType, notes as Notes "
+        "FROM assignments ORDER BY day, start_time",
         conn
     )
     conn.close()
@@ -270,9 +277,10 @@ def get_all_assignments() -> pd.DataFrame:
 
 
 def save_assignments(assignments_df: pd.DataFrame):
-    """Replace all assignments with new data from a DataFrame."""
+    """Replace unlocked assignments with new data. Locked assignments are preserved."""
     conn = get_connection()
-    conn.execute("DELETE FROM assignments")
+    # Only delete unlocked assignments; locked ones stay in the DB
+    conn.execute("DELETE FROM assignments WHERE lock_type IS NULL")
 
     for _, row in assignments_df.iterrows():
         start_val = row.get('Start', '')
@@ -304,7 +312,7 @@ def save_assignments(assignments_df: pd.DataFrame):
 
 def update_assignment(assignment_id, **kwargs):
     allowed = {'client_name', 'therapist_name', 'day', 'start_time', 'end_time',
-               'location', 'assignment_type', 'notes'}
+               'location', 'assignment_type', 'lock_type', 'notes'}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return
@@ -317,18 +325,45 @@ def update_assignment(assignment_id, **kwargs):
 
 
 def add_assignment(client_name, therapist_name, day, start_time, end_time,
-                   location='Clinic', assignment_type='Recurring', notes=''):
+                   location='Clinic', assignment_type='Recurring', lock_type=None,
+                   notes=''):
     conn = get_connection()
     cursor = conn.execute(
         "INSERT INTO assignments (client_name, therapist_name, day, start_time, end_time, "
-        "location, assignment_type, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "location, assignment_type, lock_type, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (client_name, therapist_name, day, start_time, end_time,
-         location, assignment_type, notes)
+         location, assignment_type, lock_type, notes)
     )
     conn.commit()
     new_id = cursor.lastrowid
     conn.close()
     return new_id
+
+
+def get_locked_assignments() -> pd.DataFrame:
+    """Return all assignments that have a lock_type set (hard or soft)."""
+    conn = get_connection()
+    df = pd.read_sql_query(
+        "SELECT id, client_name as Client, therapist_name as Therapist, day as Day, "
+        "start_time as Start, end_time as End, location as Location, "
+        "assignment_type as Type, lock_type as LockType, notes as Notes "
+        "FROM assignments WHERE lock_type IS NOT NULL ORDER BY day, start_time",
+        conn
+    )
+    conn.close()
+    return df
+
+
+def get_assignment_by_id(assignment_id):
+    """Return a single assignment as a dict, or None."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT id, client_name, therapist_name, day, start_time, end_time, "
+        "location, assignment_type, lock_type, notes FROM assignments WHERE id = ?",
+        (assignment_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
 def delete_assignment(assignment_id):
