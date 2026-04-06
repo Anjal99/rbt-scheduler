@@ -82,14 +82,20 @@ def gen_schedule():
     if clients_df.empty:
         return jsonify({'error': 'No clients loaded. Upload clients first.'}), 400
 
-    locked_df = get_locked_assignments()
+    try:
+        locked_df = get_locked_assignments()
+    except Exception:
+        locked_df = None
     assignments_df, warnings, stats = generate_schedule(therapists_df, clients_df, locked_df)
 
     # Save to DB (preserves locked assignments, replaces unlocked ones)
     save_assignments(assignments_df)
 
+    # Return ALL assignments (including locked ones that were preserved)
+    all_assignments_df = get_all_assignments()
+
     return jsonify({
-        'assignments': _assignments_to_json(assignments_df),
+        'assignments': _assignments_to_json(all_assignments_df),
         'warnings': warnings,
         'stats': stats,
     })

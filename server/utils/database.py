@@ -280,7 +280,11 @@ def save_assignments(assignments_df: pd.DataFrame):
     """Replace unlocked assignments with new data. Locked assignments are preserved."""
     conn = get_connection()
     # Only delete unlocked assignments; locked ones stay in the DB
-    conn.execute("DELETE FROM assignments WHERE lock_type IS NULL")
+    try:
+        conn.execute("DELETE FROM assignments WHERE lock_type IS NULL")
+    except Exception:
+        # Fallback if lock_type column doesn't exist yet
+        conn.execute("DELETE FROM assignments")
 
     for _, row in assignments_df.iterrows():
         start_val = row.get('Start', '')
