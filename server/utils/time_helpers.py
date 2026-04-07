@@ -12,8 +12,13 @@ DAYS_SET = set(DAYS_ORDER)
 
 
 def parse_time(s: str) -> time:
-    """Parse '9am', '3:30pm', '12pm', '2:00pm', etc."""
+    """Parse '9am', '3:30pm', '12pm', '2:00pm', '14:30' (24h), etc."""
     s = s.strip().lower().replace('.', '')
+    # Try 24-hour format first (HH:MM from database)
+    m24 = re.match(r'^(\d{1,2}):(\d{2})$', s)
+    if m24:
+        return time(int(m24.group(1)), int(m24.group(2)))
+    # Then try am/pm format
     m = re.match(r'(\d{1,2})(?::(\d{2}))?\s*(am|pm)', s)
     if not m:
         raise ValueError(f"Cannot parse time: '{s}'")
