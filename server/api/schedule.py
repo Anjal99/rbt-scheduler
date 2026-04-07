@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from datetime import time
+import math
 import pandas as pd
 from server.utils.database import (
     get_all_therapists, get_all_clients, get_all_assignments,
@@ -24,6 +25,10 @@ def _assignments_to_json(df):
             val = rec.get(key)
             if isinstance(val, time):
                 rec[key] = val.strftime('%H:%M')
+        # Sanitize NaN/NaT → None so JSON stays valid
+        for key, val in rec.items():
+            if val is pd.NaT or (isinstance(val, float) and math.isnan(val)):
+                rec[key] = None
         records.append(rec)
     return records
 
