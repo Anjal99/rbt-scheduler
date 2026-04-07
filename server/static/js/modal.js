@@ -61,6 +61,10 @@ const AssignmentModal = {
         document.getElementById('modal-title').textContent = 'Edit Assignment';
         document.getElementById('modal-delete').style.display = '';
 
+        // Edit mode: show single day select, hide multi-day checkboxes
+        document.getElementById('modal-day').style.display = '';
+        document.getElementById('modal-days-multi').style.display = 'none';
+
         // Populate fields
         document.getElementById('modal-client').value = assignment.Client || '';
         document.getElementById('modal-therapist').value = assignment.Therapist || '';
@@ -107,8 +111,14 @@ const AssignmentModal = {
         document.getElementById('modal-delete').style.display = 'none';
         document.getElementById('modal-save').style.display = '';
 
-        // Default to current day tab
-        document.getElementById('modal-day').value = ScheduleView.currentDay;
+        // Add mode: hide single day select, show multi-day checkboxes
+        document.getElementById('modal-day').style.display = 'none';
+        const multiContainer = document.getElementById('modal-days-multi');
+        multiContainer.style.display = '';
+        multiContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            cb.checked = (cb.value === ScheduleView.currentDay);
+        });
+
         document.getElementById('modal-client').selectedIndex = 0;
         document.getElementById('modal-therapist').selectedIndex = 0;
         document.getElementById('modal-location').value = 'Clinic';
@@ -127,6 +137,9 @@ const AssignmentModal = {
          'modal-location', 'modal-type', 'modal-start', 'modal-end'].forEach(id => {
             document.getElementById(id).disabled = false;
         });
+        // Reset day controls to default state
+        document.getElementById('modal-day').style.display = '';
+        document.getElementById('modal-days-multi').style.display = 'none';
     },
 
     _show() {
@@ -134,16 +147,22 @@ const AssignmentModal = {
     },
 
     _getFormData() {
-        return {
+        const base = {
             client_name: document.getElementById('modal-client').value,
             therapist_name: document.getElementById('modal-therapist').value,
-            day: document.getElementById('modal-day').value,
             start_time: document.getElementById('modal-start').value,
             end_time: document.getElementById('modal-end').value,
             location: document.getElementById('modal-location').value,
             assignment_type: document.getElementById('modal-type').value,
             notes: '',
         };
+        if (this._editingId) {
+            base.day = document.getElementById('modal-day').value;
+        } else {
+            const checked = [...document.querySelectorAll('#modal-days-multi input:checked')];
+            base.days = checked.map(cb => cb.value);
+        }
+        return base;
     },
 
     async _save() {
@@ -156,6 +175,10 @@ const AssignmentModal = {
         }
         if (data.start_time >= data.end_time) {
             this._showValidation('End time must be after start time.', 'errors');
+            return;
+        }
+        if (!this._editingId && (!data.days || data.days.length === 0)) {
+            this._showValidation('Please select at least one day.', 'errors');
             return;
         }
 
@@ -171,7 +194,11 @@ const AssignmentModal = {
                 }
                 await API.updateAssignment(this._editingId, data);
             } else {
-                await API.addAssignment(data);
+                const days = data.days;
+                delete data.days;
+                for (const day of days) {
+                    await API.addAssignment({ ...data, day });
+                }
             }
 
             // Validate after save

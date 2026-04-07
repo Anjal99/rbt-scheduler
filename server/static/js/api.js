@@ -6,6 +6,10 @@ const API = {
 
     async _fetch(path, opts = {}) {
         const res = await fetch(this.base + path, opts);
+        if (res.status === 401 && path !== '/api/auth/login') {
+            window.location.href = '/login';
+            throw new Error('Session expired');
+        }
         if (!res.ok) {
             const err = await res.json().catch(() => ({ error: res.statusText }));
             throw new Error(err.error || 'Request failed');
@@ -38,6 +42,18 @@ const API = {
     getTherapists()       { return this.getJSON('/api/therapists'); },
     getTherapistCount()   { return this.getJSON('/api/therapists/count'); },
     importTherapists(f)   { return this.uploadFile('/api/therapists/import', f); },
+    async updateTherapist(id, data) {
+        const res = await this._fetch(`/api/therapists/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return res.json();
+    },
+    async deleteTherapist(id) {
+        const res = await this._fetch(`/api/therapists/${id}`, { method: 'DELETE' });
+        return res.json();
+    },
 
     // Clients
     getClients()          { return this.getJSON('/api/clients'); },

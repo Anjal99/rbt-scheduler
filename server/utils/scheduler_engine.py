@@ -60,6 +60,7 @@ class Therapist:
     days: list
     availability: dict
     in_home: bool
+    in_home_only: bool
     preferred_max_hours: Optional[float]
     forty_hour_eligible: bool
     is_float: bool = False
@@ -227,7 +228,8 @@ def df_to_therapists(df: pd.DataFrame) -> list:
         hours_str = str(row.get('hours_available', row.get('Hours Available', ''))).strip()
 
         in_home_val = str(row.get('in_home', row.get('In home (Yes/No)', row.get('In-Home', 'No')))).strip().lower()
-        in_home = in_home_val in ('yes', 'true', '1')
+        in_home = in_home_val in ('yes', 'true', '1', 'only')
+        in_home_only = (in_home_val == 'only')
 
         pref_max = row.get('preferred_max_hours', row.get('preferred max hours', row.get('Preferred Max Hours', None)))
         if pd.notna(pref_max):
@@ -256,7 +258,8 @@ def df_to_therapists(df: pd.DataFrame) -> list:
 
         therapists.append(Therapist(
             name=name, days=days, availability=availability,
-            in_home=in_home, preferred_max_hours=pref_max,
+            in_home=in_home, in_home_only=in_home_only,
+            preferred_max_hours=pref_max,
             forty_hour_eligible=forty_eligible, is_float=is_float,
             direct_target=dt, direct_max=dm, notes=notes,
             flexible_days=flex
@@ -448,6 +451,8 @@ def try_assign_slot(client, day, remaining_start, remaining_end,
             continue
         if day_loc == 'Home' and not t.in_home:
             continue
+        if day_loc != 'Home' and t.in_home_only:
+            continue
         weekly = therapist_weekly_hours(t.name, assignments)
         if t.is_float and t.direct_max and weekly >= t.direct_max:
             continue
@@ -573,6 +578,8 @@ def try_assign_multi_day(client, days, remaining_start, remaining_end,
 
         day_loc = client.location_by_day.get(days[0], 'Clinic')
         if day_loc == 'Home' and not t.in_home:
+            continue
+        if day_loc != 'Home' and t.in_home_only:
             continue
 
         weekly = therapist_weekly_hours(t.name, assignments)
@@ -807,9 +814,22 @@ def generate_schedule(therapists_df: pd.DataFrame,
                     attempts += 1
                     if attempts > 15:
                         break
-                    result = try_assign_slot(client, day, remaining_start, gap_end,
-                                             therapists, timelines, assignments, relaxed=True,
-                                             soft_locked=soft_locked)
+                    result = None
+                    # High-intensity: try to keep same therapist per day
+                    if client.intensity == 'High':
+                        existing_today = set(
+                            a.therapist for a in assignments
+                            if a.client == client.name and a.day == day
+                        )
+                        if existing_today:
+                            restricted = [t for t in therapists if t.name in existing_today]
+                            result = try_assign_slot(client, day, remaining_start, gap_end,
+                                                     restricted, timelines, assignments, relaxed=True,
+                                                     soft_locked=soft_locked)
+                    if not result:
+                        result = try_assign_slot(client, day, remaining_start, gap_end,
+                                                 therapists, timelines, assignments, relaxed=True,
+                                                 soft_locked=soft_locked)
                     if result:
                         result.notes = f"Block {block_num} (gap fill)"
                         assignments.append(result)

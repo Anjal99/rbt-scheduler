@@ -47,7 +47,9 @@ const TherapistView = {
             const barClass = weekly >= 35 ? 'red' : weekly >= 30 ? 'yellow' : 'green';
             const clients = this._clientsForTherapist(t.name);
             const inHome = String(t.in_home || '').toLowerCase();
-            const inHomeBadge = inHome === 'yes' ? '<span class="badge badge-home">Yes</span>' : '<span class="badge badge-clinic">No</span>';
+            const inHomeBadge = inHome === 'only' ? '<span class="badge badge-home">Only</span>'
+                : inHome === 'yes' ? '<span class="badge badge-home">Yes</span>'
+                : '<span class="badge badge-clinic">No</span>';
             const eligBadge = String(t.forty_hour_eligible || '').toLowerCase() === 'yes'
                 ? '<span class="badge badge-home">Yes</span>'
                 : '<span class="badge badge-clinic">No</span>';
@@ -157,12 +159,7 @@ const TherapistModal = {
 
         try {
             if (this._editingId) {
-                await API.postJSON(`/api/therapists/${this._editingId}`, data)
-                    .catch(() => fetch(`/api/therapists/${this._editingId}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(data),
-                    }).then(r => r.json()));
+                await API.updateTherapist(this._editingId, data);
                 App.toast('Therapist updated', 'success');
             } else {
                 await API.postJSON('/api/therapists', data);
@@ -186,7 +183,7 @@ const TherapistModal = {
         if (!confirm('Delete this therapist? This cannot be undone.')) return;
 
         try {
-            await fetch(`/api/therapists/${this._editingId}`, { method: 'DELETE' }).then(r => r.json());
+            await API.deleteTherapist(this._editingId);
             App.toast('Therapist deleted', 'success');
             this.close();
             await TherapistView.load();

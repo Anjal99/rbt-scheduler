@@ -368,6 +368,20 @@ body {
     box-shadow: 0 0 0 3px rgba(59,130,246,.1);
 }
 
+.checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 8px 0;
+}
+.checkbox-group .cb-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: .85rem;
+    cursor: pointer;
+}
+
 .modal-validation {
     margin-top: 12px;
     padding: 10px 12px;

@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from datetime import time
 import math
 import pandas as pd
@@ -211,5 +211,7 @@ def schedule_stats():
 
 @schedule_bp.route('/reset', methods=['POST'])
 def reset_everything():
+    if session.get('user_role') != 'admin':
+        return jsonify({'error': 'Admin access required'}), 403
     reset_all()
     return jsonify({'message': 'All data cleared'})

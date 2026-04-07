@@ -132,6 +132,47 @@ def check_workloads(assignments_df: pd.DataFrame, therapists_df: pd.DataFrame = 
     return flags
 
 
+def check_location_conflicts(assignments_df: pd.DataFrame,
+                              therapists_df: pd.DataFrame) -> list:
+    """Flag in-home-only therapists assigned to clinic clients,
+    and non-in-home therapists assigned to home clients."""
+    flags = []
+    if therapists_df is None or therapists_df.empty:
+        return flags
+
+    for therapist in assignments_df['Therapist'].unique():
+        t_info = therapists_df[therapists_df['name'] == therapist]
+        if t_info.empty:
+            continue
+        in_home_val = str(t_info.iloc[0].get('in_home', 'No')).strip().lower()
+        is_in_home_only = (in_home_val == 'only')
+        can_do_home = in_home_val in ('yes', 'only')
+
+        td = assignments_df[assignments_df['Therapist'] == therapist]
+        for _, row in td.iterrows():
+            loc = str(row.get('Location', 'Clinic')).strip()
+            is_home = 'home' in loc.lower()
+
+            if is_in_home_only and not is_home:
+                flags.append({
+                    'severity': 'Critical',
+                    'rule': 'Location Conflict',
+                    'who': therapist,
+                    'day': row.get('Day', ''),
+                    'detail': f"In-Home Only therapist assigned to clinic client {row.get('Client', '')}",
+                })
+            elif not can_do_home and is_home:
+                flags.append({
+                    'severity': 'Critical',
+                    'rule': 'Location Conflict',
+                    'who': therapist,
+                    'day': row.get('Day', ''),
+                    'detail': f"Non in-home therapist assigned to home client {row.get('Client', '')}",
+                })
+
+    return flags
+
+
 def validate_schedule(assignments_df: pd.DataFrame,
                       therapists_df: pd.DataFrame = None,
                       clients_df: pd.DataFrame = None) -> list:
@@ -143,6 +184,7 @@ def validate_schedule(assignments_df: pd.DataFrame,
     flags.extend(check_overlaps(assignments_df))
     flags.extend(check_chains(assignments_df))
     flags.extend(check_workloads(assignments_df, therapists_df))
+    flags.extend(check_location_conflicts(assignments_df, therapists_df))
 
     if clients_df is not None and not clients_df.empty:
         from server.utils.time_helpers import parse_days_string
