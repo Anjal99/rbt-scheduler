@@ -85,29 +85,43 @@ const ScheduleDrag = {
             // Update via API
             await API.updateAssignment(assignmentId, { therapist_name: newTherapist });
 
-            // Validate
+            // Validate — only block on overlaps for the target therapist on this day
             const validation = await API.validateSchedule();
-            const errors = validation.flags.filter(f =>
-                f.severity === 'Error' || f.severity === 'Critical'
+            const overlaps = validation.flags.filter(f =>
+                f.rule === 'Overlap' &&
+                f.who === newTherapist &&
+                f.day === assignment.Day
+            );
+            const locationConflicts = validation.flags.filter(f =>
+                f.severity === 'Critical' &&
+                f.who === newTherapist &&
+                f.day === assignment.Day
             );
 
-            // Check for new errors involving this therapist
-            const relevantErrors = errors.filter(f =>
-                f.who === newTherapist || f.who === oldTherapist
-            );
+            const blockers = [...overlaps, ...locationConflicts];
 
-            if (relevantErrors.length > 0) {
-                // Revert
+            if (blockers.length > 0) {
+                // Revert — there's a real conflict
                 await API.updateAssignment(assignmentId, { therapist_name: oldTherapist });
-                this._undoStack.pop(); // Remove the undo entry
+                this._undoStack.pop();
 
-                const msgs = relevantErrors.map(e => `${e.detail}`).join('; ');
-                App.toast(`Can't move: ${msgs}`, 'error');
+                const msg = blockers[0].rule === 'Overlap'
+                    ? `Time conflict with another assignment on ${assignment.Day}`
+                    : `Location conflict for ${newTherapist}`;
+                App.toast(msg, 'error');
 
-                // Refresh to snap back
                 await ScheduleView.refresh();
             } else {
-                App.toast(`Moved ${assignment.Client} to ${newTherapist}`, 'success');
+                // Check for non-blocking warnings
+                const warnings = validation.flags.filter(f =>
+                    (f.severity === 'Warning' || f.severity === 'Info') &&
+                    f.who === newTherapist
+                );
+                if (warnings.length > 0) {
+                    App.toast(`Moved to ${newTherapist} (${warnings.length} warning${warnings.length > 1 ? 's' : ''})`, 'success');
+                } else {
+                    App.toast(`Moved ${assignment.Client} to ${newTherapist}`, 'success');
+                }
                 await ScheduleView.refresh();
             }
         } catch (err) {

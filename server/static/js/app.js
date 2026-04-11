@@ -33,6 +33,7 @@ const App = {
         // Init modals
         AssignmentModal.init();
         TherapistModal.init();
+        ClientModal.init();
         if (this.currentUser.role === 'admin') {
             InviteModal.init();
         }
@@ -161,8 +162,7 @@ const App = {
 
                 this.toast(`Imported ${tResult.added} therapists, ${cResult.added} clients`, 'success');
                 this.refreshDashboard();
-                // Refresh modal dropdowns
-                AssignmentModal.init();
+                AssignmentModal.refreshData();
             } catch (err) {
                 statusEl.style.display = '';
                 statusEl.className = 'upload-status error';
@@ -184,7 +184,7 @@ const App = {
                 document.getElementById('upload-status').style.display = 'none';
                 this.toast('All data cleared', 'success');
                 this.refreshDashboard();
-                AssignmentModal.init();
+                AssignmentModal.refreshData();
             } catch (err) {
                 this.toast('Reset failed: ' + err.message, 'error');
             } finally {

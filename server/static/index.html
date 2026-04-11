@@ -135,10 +135,19 @@
                         </div>
                     </div>
                     <div class="form-row">
-                        <div class="form-group">
+                        <div class="form-group" style="flex:1">
                             <label>Days Available</label>
-                            <input type="text" id="tm-days" class="form-input" value="Mon - Fri" placeholder="Mon - Fri">
+                            <div id="tm-days-checks" class="checkbox-group">
+                                <label class="cb-label"><input type="checkbox" value="Mon" checked> Mon</label>
+                                <label class="cb-label"><input type="checkbox" value="Tue" checked> Tue</label>
+                                <label class="cb-label"><input type="checkbox" value="Wed" checked> Wed</label>
+                                <label class="cb-label"><input type="checkbox" value="Thu" checked> Thu</label>
+                                <label class="cb-label"><input type="checkbox" value="Fri" checked> Fri</label>
+                                <label class="cb-label"><input type="checkbox" value="Sat"> Sat</label>
+                            </div>
                         </div>
+                    </div>
+                    <div class="form-row">
                         <div class="form-group">
                             <label>Hours Available</label>
                             <input type="text" id="tm-hours" class="form-input" value="8am - 5pm" placeholder="8am - 5pm">
@@ -190,6 +199,73 @@
             </div>
             <div id="clients-content"></div>
         </section>
+
+        <!-- Client Edit Modal -->
+        <div id="client-modal-overlay" class="modal-overlay" style="display:none">
+            <div class="modal">
+                <div class="modal-header">
+                    <h2 id="client-modal-title">Edit Client</h2>
+                    <button class="modal-close" id="cm-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1">
+                            <label>Name</label>
+                            <input type="text" id="cm-name" class="form-input" disabled>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1">
+                            <label>Schedule Needed</label>
+                            <input type="text" id="cm-schedule" class="form-input" placeholder="e.g. Mon 9-12, Wed 2-5pm (optional)">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1">
+                            <label>Days</label>
+                            <div id="cm-days-checks" class="checkbox-group">
+                                <label class="cb-label"><input type="checkbox" value="Mon" checked> Mon</label>
+                                <label class="cb-label"><input type="checkbox" value="Tue" checked> Tue</label>
+                                <label class="cb-label"><input type="checkbox" value="Wed" checked> Wed</label>
+                                <label class="cb-label"><input type="checkbox" value="Thu" checked> Thu</label>
+                                <label class="cb-label"><input type="checkbox" value="Fri" checked> Fri</label>
+                                <label class="cb-label"><input type="checkbox" value="Sat"> Sat</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Location</label>
+                            <select id="cm-location" class="form-select">
+                                <option value="Clinic">Clinic</option>
+                                <option value="Home">Home</option>
+                                <option value="Hybrid">Hybrid</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Intensity</label>
+                            <select id="cm-intensity" class="form-select">
+                                <option value="Low">Low</option>
+                                <option value="High">High</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1">
+                            <label>Notes</label>
+                            <input type="text" id="cm-notes" class="form-input" placeholder="Optional">
+                        </div>
+                    </div>
+                    <div id="client-modal-error" class="modal-validation has-errors" style="display:none"></div>
+                </div>
+                <div class="modal-footer">
+                    <div class="modal-footer-right">
+                        <button class="btn btn-secondary" id="cm-cancel">Cancel</button>
+                        <button class="btn btn-primary" id="cm-save">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Validation page -->
         <section id="page-validation" class="page">

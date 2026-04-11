@@ -421,6 +421,90 @@
     font-size: .75rem;
 }
 
+/* === Week Calendar View === */
+.week-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+.week-row {
+    display: grid;
+    grid-template-columns: 160px repeat(6, 1fr);
+    border-bottom: 1px solid var(--border);
+}
+.week-row:last-child { border-bottom: none; }
+.week-header-row {
+    background: #f1f5f9;
+    font-weight: 700;
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--text-muted);
+}
+.week-header-row .week-day-cell {
+    text-align: center;
+}
+.week-name-cell {
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-right: 1px solid var(--border);
+    background: #fafbfc;
+}
+.week-day-cell {
+    padding: 8px 6px;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 60px;
+}
+.week-day-cell:last-child { border-right: none; }
+.week-card {
+    background: #f8fafc;
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: .7rem;
+    cursor: pointer;
+    transition: background .15s, transform .1s;
+    position: relative;
+}
+.week-card:hover {
+    background: #eff6ff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0,0,0,.1);
+}
+.week-card-client {
+    font-weight: 700;
+    font-size: .7rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.week-card-time {
+    font-size: .65rem;
+    color: var(--text-muted);
+}
+.week-card-loc {
+    position: absolute;
+    top: 3px;
+    right: 4px;
+    font-size: .55rem;
+    font-weight: 700;
+    opacity: .6;
+}
+.week-empty-cell {
+    text-align: center;
+    color: var(--border);
+    font-size: .8rem;
+    padding: 8px;
+}
+
 /* === Responsive === */
 @media (max-width: 1024px) {
     .hours-sidebar { display: none; }
@@ -442,4 +526,7 @@
     .schedule-toolbar { gap: 8px; }
     .day-tabs { gap: 2px; }
     .day-tab { padding: 6px 12px; font-size: .8rem; }
+    .week-grid { overflow-x: auto; }
+    .week-row { min-width: 700px; }
+    .week-name-cell { min-width: 120px; }
 }

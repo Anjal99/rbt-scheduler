@@ -249,6 +249,19 @@ def bulk_import_clients(df: pd.DataFrame) -> int:
     return added
 
 
+def update_client(client_id, **kwargs):
+    allowed = {'name', 'schedule_needed', 'days', 'in_home', 'travel_notes', 'intensity', 'notes'}
+    fields = {k: v for k, v in kwargs.items() if k in allowed}
+    if not fields:
+        return
+    set_clause = ', '.join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [client_id]
+    conn = get_connection()
+    conn.execute(f"UPDATE clients SET {set_clause} WHERE id = ?", values)
+    conn.commit()
+    conn.close()
+
+
 def delete_all_clients():
     conn = get_connection()
     conn.execute("DELETE FROM clients")

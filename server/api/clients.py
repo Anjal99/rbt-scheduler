@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
 import pandas as pd
 from server.utils.database import (
-    get_all_clients, bulk_import_clients, delete_all_clients, client_count
+    get_all_clients, bulk_import_clients, delete_all_clients, client_count,
+    update_client
 )
 
 clients_bp = Blueprint('clients', __name__)
@@ -32,6 +33,15 @@ def upload_clients():
     delete_all_clients()
     added = bulk_import_clients(df)
     return jsonify({'added': added, 'total': client_count()})
+
+
+@clients_bp.route('/<int:client_id>', methods=['PUT'])
+def edit_client(client_id):
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    update_client(client_id, **data)
+    return jsonify({'message': 'Client updated'})
 
 
 @clients_bp.route('/count', methods=['GET'])

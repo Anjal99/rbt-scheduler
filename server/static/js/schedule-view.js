@@ -88,9 +88,12 @@ const ScheduleView = {
         html += `<div class="view-toggle">
             <button class="view-btn ${this._viewMode === 'therapist' ? 'active' : ''}" data-view="therapist">By Therapist</button>
             <button class="view-btn ${this._viewMode === 'client' ? 'active' : ''}" data-view="client">By Client</button>
+            <button class="view-btn ${this._viewMode === 'week' ? 'active' : ''}" data-view="week">Week</button>
         </div>`;
 
-        if (this._viewMode === 'client') {
+        if (this._viewMode === 'week') {
+            html += this._renderWeekView(weeklyHours);
+        } else if (this._viewMode === 'client') {
             html += this._renderByClient(dayAssignments, weeklyHours);
         } else {
             html += this._renderByTherapist(dayAssignments, weeklyHours);
@@ -155,9 +158,10 @@ const ScheduleView = {
                 }
             });
         });
-        // Card clicks → edit
-        container.querySelectorAll('.planner-card[data-id]').forEach(card => {
-            card.addEventListener('click', () => {
+        // Card clicks → edit (planner cards + week view cards)
+        container.querySelectorAll('.planner-card[data-id], .week-card[data-id]').forEach(card => {
+            card.addEventListener('click', (e) => {
+                e.stopPropagation();
                 const id = parseInt(card.dataset.id);
                 const assignment = this.assignments.find(a => a.id === id);
                 if (assignment) AssignmentModal.openEdit(assignment);
@@ -233,6 +237,70 @@ const ScheduleView = {
             assignments.forEach(a => { html += this._renderCard(a, 'therapist'); });
             html += `</div></div>`;
         });
+        html += '</div>';
+        return html;
+    },
+
+    _renderWeekView(weeklyHours) {
+        const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        // Group by therapist, then by day
+        const byTherapist = {};
+        this.assignments.forEach(a => {
+            if (this.filterTherapist && a.Therapist !== this.filterTherapist) return;
+            if (this.filterClient && a.Client !== this.filterClient) return;
+            if (!byTherapist[a.Therapist]) byTherapist[a.Therapist] = {};
+            if (!byTherapist[a.Therapist][a.Day]) byTherapist[a.Therapist][a.Day] = [];
+            byTherapist[a.Therapist][a.Day].push(a);
+        });
+
+        const therapists = Object.keys(byTherapist).sort();
+        if (!therapists.length) {
+            return '<div class="schedule-empty">No assignments to display.</div>';
+        }
+
+        let html = '<div class="week-grid">';
+        // Header row
+        html += '<div class="week-row week-header-row">';
+        html += '<div class="week-name-cell">Therapist</div>';
+        DAYS.forEach(d => {
+            html += `<div class="week-day-cell">${d}</div>`;
+        });
+        html += '</div>';
+
+        therapists.forEach(therapist => {
+            const weekly = weeklyHours[therapist] || 0;
+            const statusClass = weekly >= 35 ? 'status-over' : weekly >= 30 ? 'status-warn' : 'status-ok';
+
+            html += '<div class="week-row">';
+            html += `<div class="week-name-cell">
+                <span class="planner-name">${therapist}</span>
+                <span class="planner-weekly ${statusClass}">${weekly.toFixed(1)}h</span>
+            </div>`;
+
+            DAYS.forEach(day => {
+                const dayAssignments = (byTherapist[therapist][day] || []).sort((a, b) =>
+                    this.timeToMinutes(this.parseTime(a.Start)) - this.timeToMinutes(this.parseTime(b.Start))
+                );
+                html += '<div class="week-day-cell">';
+                dayAssignments.forEach(a => {
+                    const start = this.parseTime(a.Start);
+                    const end = this.parseTime(a.End);
+                    const color = this.getClientColor(a.Client);
+                    const locIcon = (a.Location || '').toLowerCase().includes('home') ? 'H' : 'C';
+                    html += `<div class="week-card" data-id="${a.id || ''}" style="border-left:3px solid ${color}">
+                        <div class="week-card-client" style="color:${color}">${a.Client}</div>
+                        <div class="week-card-time">${this.formatTime(start)}-${this.formatTime(end)}</div>
+                        <span class="week-card-loc">${locIcon}</span>
+                    </div>`;
+                });
+                if (!dayAssignments.length) {
+                    html += '<div class="week-empty-cell">&mdash;</div>';
+                }
+                html += '</div>';
+            });
+            html += '</div>';
+        });
+
         html += '</div>';
         return html;
     },

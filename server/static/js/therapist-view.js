@@ -98,12 +98,47 @@ const TherapistModal = {
         });
     },
 
+    /** Parse a days string like "Mon - Fri" or "Mon, Tue, Wed" into a Set of day abbreviations. */
+    _parseDaysString(str) {
+        if (!str) return new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+        const allDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const s = str.trim();
+        // Handle range format: "Mon - Fri"
+        const rangeMatch = s.match(/^(\w{3})\s*-\s*(\w{3})$/);
+        if (rangeMatch) {
+            const startIdx = allDays.indexOf(rangeMatch[1]);
+            const endIdx = allDays.indexOf(rangeMatch[2]);
+            if (startIdx >= 0 && endIdx >= 0) {
+                return new Set(allDays.slice(startIdx, endIdx + 1));
+            }
+        }
+        // Handle comma-separated: "Mon, Tue, Fri"
+        const days = new Set();
+        allDays.forEach(d => {
+            if (s.includes(d)) days.add(d);
+        });
+        return days.size ? days : new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+    },
+
+    /** Set day checkboxes from a Set of day abbreviations. */
+    _setDayCheckboxes(days) {
+        document.querySelectorAll('#tm-days-checks input[type="checkbox"]').forEach(cb => {
+            cb.checked = days.has(cb.value);
+        });
+    },
+
+    /** Get selected days as a comma-separated string. */
+    _getDaysFromCheckboxes() {
+        const checked = [...document.querySelectorAll('#tm-days-checks input:checked')];
+        return checked.map(cb => cb.value).join(', ');
+    },
+
     openAdd() {
         this._editingId = null;
         document.getElementById('therapist-modal-title').textContent = 'Add Therapist';
         document.getElementById('tm-delete').style.display = 'none';
         document.getElementById('tm-name').value = '';
-        document.getElementById('tm-days').value = 'Mon - Fri';
+        this._setDayCheckboxes(new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']));
         document.getElementById('tm-hours').value = '8am - 5pm';
         document.getElementById('tm-inhome').value = 'Yes';
         document.getElementById('tm-forty').value = 'yes';
@@ -118,7 +153,7 @@ const TherapistModal = {
         document.getElementById('therapist-modal-title').textContent = 'Edit Therapist';
         document.getElementById('tm-delete').style.display = '';
         document.getElementById('tm-name').value = t.name || '';
-        document.getElementById('tm-days').value = t.days_available || 'Mon - Fri';
+        this._setDayCheckboxes(this._parseDaysString(t.days_available));
         document.getElementById('tm-hours').value = t.hours_available || '8am - 5pm';
         document.getElementById('tm-inhome').value = (t.in_home || 'No');
         document.getElementById('tm-forty').value = (t.forty_hour_eligible || 'No');
@@ -145,7 +180,7 @@ const TherapistModal = {
 
         const data = {
             name: name,
-            days_available: document.getElementById('tm-days').value.trim(),
+            days_available: this._getDaysFromCheckboxes(),
             hours_available: document.getElementById('tm-hours').value.trim(),
             in_home: document.getElementById('tm-inhome').value,
             forty_hour_eligible: document.getElementById('tm-forty').value,
@@ -166,10 +201,9 @@ const TherapistModal = {
                 App.toast('Therapist added', 'success');
             }
             this.close();
-            // Refresh therapist list + modal dropdowns
             await TherapistView.load();
             TherapistView.render(document.getElementById('therapists-content'));
-            AssignmentModal.init();
+            AssignmentModal.refreshData();
         } catch (err) {
             this._showError('Save failed: ' + err.message);
         } finally {
@@ -188,7 +222,7 @@ const TherapistModal = {
             this.close();
             await TherapistView.load();
             TherapistView.render(document.getElementById('therapists-content'));
-            AssignmentModal.init();
+            AssignmentModal.refreshData();
         } catch (err) {
             this._showError('Delete failed: ' + err.message);
         }

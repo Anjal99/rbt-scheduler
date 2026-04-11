@@ -11,3 +11,9 @@ data/*.db
 *.docx
 secrets.toml
 .streamlit/
+node_modules/
+tests/
+test-results/
+package.json
+package-lock.json
+playwright.config.js

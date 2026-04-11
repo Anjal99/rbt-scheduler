@@ -59,6 +59,14 @@ const API = {
     getClients()          { return this.getJSON('/api/clients'); },
     getClientCount()      { return this.getJSON('/api/clients/count'); },
     uploadClients(f)      { return this.uploadFile('/api/clients/upload', f); },
+    async updateClient(id, data) {
+        const res = await this._fetch(`/api/clients/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return res.json();
+    },
 
     // Schedule
     getSchedule()         { return this.getJSON('/api/schedule'); },

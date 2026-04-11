@@ -1,5 +1,5 @@
 /**
- * Validation view - displays schedule rule violations.
+ * Validation view - displays schedule rule violations with user-friendly messages.
  */
 const ValidationView = {
     flags: [],
@@ -10,6 +10,32 @@ const ValidationView = {
         this.flags = data.flags || [];
         this.counts = data.counts || {};
         return data;
+    },
+
+    /** Convert a validation flag into a short, friendly description. */
+    _friendlyMessage(flag) {
+        switch (flag.rule) {
+            case 'Overlap':
+                return 'Has overlapping assignments — two sessions at the same time';
+            case '4h Break':
+                return 'Working too long without a break (needs 30 min after 4h)';
+            case 'Workload':
+                return 'Over the weekly hour limit';
+            case '40h':
+                return 'At 40+ hours — verify a 2-hour mid-day break is scheduled';
+            case 'Pref Max':
+                return 'Exceeding their preferred max hours';
+            case 'Location Conflict':
+                return 'Assigned to a location they can\'t work at';
+            case 'Unscheduled':
+                return 'Has no assignments at all';
+            case 'Coverage':
+                return 'Missing sessions on required days';
+            case 'Coverage Gap':
+                return 'Not enough hours assigned for their needs';
+            default:
+                return flag.detail;
+        }
     },
 
     render(statsContainer, contentContainer) {
@@ -42,6 +68,12 @@ const ValidationView = {
         });
 
         let html = '';
+        const sevLabels = {
+            Critical: 'Needs Immediate Attention',
+            Error: 'Conflicts',
+            Warning: 'Heads Up',
+            Info: 'Notes'
+        };
         const order = ['Critical', 'Error', 'Warning', 'Info'];
         order.forEach(sev => {
             const items = groups[sev];
@@ -49,16 +81,15 @@ const ValidationView = {
 
             const clsMap = { Critical: 'critical', Error: 'errors', Warning: 'warnings', Info: 'info' };
             html += `<div class="flag-group">`;
-            html += `<div class="flag-group-header ${clsMap[sev]}">${sev} (${items.length})</div>`;
+            html += `<div class="flag-group-header ${clsMap[sev]}">${sevLabels[sev]} (${items.length})</div>`;
 
             items.forEach(f => {
                 const itemCls = sev.toLowerCase();
                 html += `<div class="warning-item ${itemCls}">`;
                 html += `<div class="warning-dot"></div>`;
                 html += `<div><strong>${f.who}</strong>`;
-                if (f.day) html += ` on ${f.day}`;
-                html += ` - ${f.detail}`;
-                html += ` <span class="text-muted text-sm">[${f.rule}]</span>`;
+                if (f.day) html += ` &middot; ${f.day}`;
+                html += `<br><span class="text-sm">${this._friendlyMessage(f)}</span>`;
                 html += `</div></div>`;
             });
 
