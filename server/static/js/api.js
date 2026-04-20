@@ -59,12 +59,17 @@ const API = {
     getClients()          { return this.getJSON('/api/clients'); },
     getClientCount()      { return this.getJSON('/api/clients/count'); },
     uploadClients(f)      { return this.uploadFile('/api/clients/upload', f); },
+    addClient(data)       { return this.postJSON('/api/clients', data); },
     async updateClient(id, data) {
         const res = await this._fetch(`/api/clients/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
         });
+        return res.json();
+    },
+    async deleteClient(id) {
+        const res = await this._fetch(`/api/clients/${id}`, { method: 'DELETE' });
         return res.json();
     },
 

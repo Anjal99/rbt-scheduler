@@ -2,7 +2,11 @@ __pycache__/
 *.pyc
 .DS_Store
 server/data/*.db
+server/data/*.db-*
 data/*.db
+.venv/
+venv/
+.claude/
 ~$*
 *.swp
 .env

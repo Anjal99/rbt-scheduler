@@ -32,6 +32,23 @@ const ClientView = {
         return [...new Set(this.assignments.filter(a => a.Client === name).map(a => a.Day))];
     },
 
+    _utilizationCell(assigned, approved) {
+        if (!approved || approved <= 0) {
+            return `<td><strong>${assigned.toFixed(1)}h</strong> <span class="text-muted text-sm">/ --</span></td>`;
+        }
+        const pct = (assigned / approved) * 100;
+        const barPct = Math.min(pct, 100);
+        let barClass;
+        if (pct > 105) barClass = 'red';
+        else if (pct >= 95) barClass = 'green';
+        else if (pct >= 70) barClass = 'yellow';
+        else barClass = 'red';
+        return `<td>
+            <div><strong>${assigned.toFixed(1)}h</strong> <span class="text-muted text-sm">/ ${approved}h</span></div>
+            <div class="hours-bar" style="margin-top:4px"><div class="hours-bar-fill ${barClass}" style="width:${barPct}%"></div></div>
+        </td>`;
+    },
+
     render(container) {
         if (!this.clients.length) {
             container.innerHTML = '<div class="empty-state">No clients loaded. Upload an Excel file from the Dashboard.</div>';
@@ -41,14 +58,14 @@ const ClientView = {
         let html = '<div class="table-wrapper"><table class="data-table">';
         html += '<thead><tr>';
         html += '<th>Name</th><th>Schedule Needed</th><th>Days</th>';
-        html += '<th>Location</th><th>Intensity</th><th>Assigned Hours</th><th>Therapists</th>';
+        html += '<th>Location</th><th>Intensity</th><th>Utilization</th><th>Therapists</th>';
         html += '</tr></thead><tbody>';
 
         this.clients.forEach(c => {
             const name = c.name || c.Name || '';
             const therapists = this._therapistsForClient(name);
             const hours = this._weeklyHoursForClient(name);
-            const assignedDays = this._daysAssigned(name);
+            const approved = c.approved_hours || c['Approved Hours'] || null;
 
             const location = c.in_home || c['In-Home'] || 'Clinic';
             let locBadge = '<span class="badge badge-clinic">Clinic</span>';
@@ -72,7 +89,7 @@ const ClientView = {
             html += `<td>${days}</td>`;
             html += `<td>${locBadge}</td>`;
             html += `<td>${intBadge}</td>`;
-            html += `<td><strong>${hours.toFixed(1)}h</strong> <span class="text-muted text-sm">(${assignedDays.length} days)</span></td>`;
+            html += this._utilizationCell(hours, approved);
             html += `<td class="text-sm">${therapists.join(', ') || '<span class="text-muted">Unassigned</span>'}</td>`;
             html += '</tr>';
         });
@@ -93,15 +110,17 @@ const ClientView = {
 
 
 /**
- * Client edit modal.
+ * Client add/edit modal.
  */
 const ClientModal = {
     _editingId: null,
 
     init() {
+        document.getElementById('add-client-btn').addEventListener('click', () => this.openAdd());
         document.getElementById('cm-close').addEventListener('click', () => this.close());
         document.getElementById('cm-cancel').addEventListener('click', () => this.close());
         document.getElementById('cm-save').addEventListener('click', () => this._save());
+        document.getElementById('cm-delete').addEventListener('click', () => this._delete());
         document.getElementById('client-modal-overlay').addEventListener('click', (e) => {
             if (e.target.id === 'client-modal-overlay') this.close();
         });
@@ -136,10 +155,30 @@ const ClientModal = {
         return checked.map(cb => cb.value).join(', ');
     },
 
+    openAdd() {
+        this._editingId = null;
+        document.getElementById('client-modal-title').textContent = 'Add Client';
+        document.getElementById('cm-delete').style.display = 'none';
+        const nameEl = document.getElementById('cm-name');
+        nameEl.value = '';
+        nameEl.disabled = false;
+        document.getElementById('cm-schedule').value = '';
+        this._setDayCheckboxes(new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']));
+        document.getElementById('cm-location').value = 'Clinic';
+        document.getElementById('cm-intensity').value = 'Low';
+        document.getElementById('cm-approved').value = '';
+        document.getElementById('cm-notes').value = '';
+        this._clearError();
+        this._show();
+    },
+
     openEdit(c) {
         this._editingId = c.id;
         document.getElementById('client-modal-title').textContent = 'Edit Client';
-        document.getElementById('cm-name').value = c.name || c.Name || '';
+        document.getElementById('cm-delete').style.display = '';
+        const nameEl = document.getElementById('cm-name');
+        nameEl.value = c.name || c.Name || '';
+        nameEl.disabled = true;
         document.getElementById('cm-schedule').value = c.schedule_needed || c['Schedule Needed'] || '';
         this._setDayCheckboxes(this._parseDaysString(c.days || c.Days));
 
@@ -153,6 +192,8 @@ const ClientModal = {
         }
 
         document.getElementById('cm-intensity').value = (c.intensity || c.Intensity || 'Low');
+        const approved = c.approved_hours || c['Approved Hours'];
+        document.getElementById('cm-approved').value = (approved == null || approved === '') ? '' : approved;
         document.getElementById('cm-notes').value = c.notes || c.Notes || '';
         this._clearError();
         this._show();
@@ -166,30 +207,66 @@ const ClientModal = {
         document.getElementById('client-modal-overlay').style.display = '';
     },
 
-    async _save() {
-        const data = {
+    _collectFormData() {
+        const approvedRaw = document.getElementById('cm-approved').value.trim();
+        return {
             schedule_needed: document.getElementById('cm-schedule').value.trim(),
             days: this._getDaysFromCheckboxes(),
             in_home: document.getElementById('cm-location').value,
             intensity: document.getElementById('cm-intensity').value,
+            approved_hours: approvedRaw === '' ? null : parseFloat(approvedRaw),
             notes: document.getElementById('cm-notes').value.trim(),
         };
+    },
 
+    async _save() {
+        const data = this._collectFormData();
         const btn = document.getElementById('cm-save');
         btn.disabled = true;
         btn.textContent = 'Saving...';
 
         try {
-            await API.updateClient(this._editingId, data);
-            App.toast('Client updated', 'success');
+            if (this._editingId) {
+                await API.updateClient(this._editingId, data);
+                App.toast('Client updated', 'success');
+            } else {
+                const name = document.getElementById('cm-name').value.trim();
+                if (!name) {
+                    this._showError('Name is required.');
+                    return;
+                }
+                await API.addClient({ name, ...data });
+                App.toast('Client added', 'success');
+            }
             this.close();
             await ClientView.load();
             ClientView.render(document.getElementById('clients-content'));
+            if (typeof AssignmentModal !== 'undefined' && AssignmentModal.refreshData) {
+                AssignmentModal.refreshData();
+            }
         } catch (err) {
             this._showError('Save failed: ' + err.message);
         } finally {
             btn.disabled = false;
             btn.textContent = 'Save';
+        }
+    },
+
+    async _delete() {
+        if (!this._editingId) return;
+        if (!confirm('Delete this client? This cannot be undone.')) return;
+
+        try {
+            await API.deleteClient(this._editingId);
+            App.toast('Client deleted', 'success');
+            this.close();
+            await ClientView.load();
+            ClientView.render(document.getElementById('clients-content'));
+            if (typeof AssignmentModal !== 'undefined' && AssignmentModal.refreshData) {
+                AssignmentModal.refreshData();
+            }
+        } catch (err) {
+            this._showError(err.message);
         }
     },
 

@@ -52,6 +52,7 @@ def init_db():
             in_home TEXT DEFAULT 'Clinic',
             travel_notes TEXT DEFAULT '',
             intensity TEXT DEFAULT 'Low',
+            approved_hours REAL,
             notes TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -86,6 +87,12 @@ def init_db():
         conn.execute("SELECT lock_type FROM assignments LIMIT 1")
     except sqlite3.OperationalError:
         conn.execute("ALTER TABLE assignments ADD COLUMN lock_type TEXT DEFAULT NULL")
+
+    # Add approved_hours column if missing (migration for existing DBs)
+    try:
+        conn.execute("SELECT approved_hours FROM clients LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE clients ADD COLUMN approved_hours REAL")
 
     conn.commit()
     conn.close()
@@ -202,8 +209,8 @@ def therapist_count():
 def get_all_clients() -> pd.DataFrame:
     conn = get_connection()
     df = pd.read_sql_query(
-        "SELECT id, name, schedule_needed, days, in_home, travel_notes, intensity, notes "
-        "FROM clients ORDER BY name",
+        "SELECT id, name, schedule_needed, days, in_home, travel_notes, intensity, "
+        "approved_hours, notes FROM clients ORDER BY name",
         conn
     )
     conn.close()
@@ -228,9 +235,18 @@ def bulk_import_clients(df: pd.DataFrame) -> int:
         if not name or name in existing:
             continue
 
+        approved = row.get('Approved Hours', row.get('approved_hours', None))
+        if approved is not None and (isinstance(approved, float) and pd.isna(approved)):
+            approved = None
+        elif approved is not None:
+            try:
+                approved = float(approved)
+            except (TypeError, ValueError):
+                approved = None
+
         conn.execute(
-            "INSERT INTO clients (name, schedule_needed, days, in_home, travel_notes, intensity, notes) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO clients (name, schedule_needed, days, in_home, travel_notes, "
+            "intensity, approved_hours, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 name,
                 clean(row.get('Schedule Needed', row.get('schedule_needed', ''))),
@@ -238,6 +254,7 @@ def bulk_import_clients(df: pd.DataFrame) -> int:
                 clean(row.get('In-Home', row.get('in_home', '')), 'Clinic'),
                 clean(row.get('Travel notes', row.get('travel_notes', ''))),
                 clean(row.get('Intensity', row.get('intensity', '')), 'Low'),
+                approved,
                 clean(row.get('Notes', row.get('notes', ''))),
             )
         )
@@ -249,8 +266,24 @@ def bulk_import_clients(df: pd.DataFrame) -> int:
     return added
 
 
+def add_client(name, schedule_needed='', days='Mon - Fri', in_home='Clinic',
+               travel_notes='', intensity='Low', approved_hours=None, notes=''):
+    conn = get_connection()
+    cursor = conn.execute(
+        "INSERT INTO clients (name, schedule_needed, days, in_home, travel_notes, "
+        "intensity, approved_hours, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (name, schedule_needed, days, in_home, travel_notes, intensity,
+         approved_hours, notes)
+    )
+    conn.commit()
+    new_id = cursor.lastrowid
+    conn.close()
+    return new_id
+
+
 def update_client(client_id, **kwargs):
-    allowed = {'name', 'schedule_needed', 'days', 'in_home', 'travel_notes', 'intensity', 'notes'}
+    allowed = {'name', 'schedule_needed', 'days', 'in_home', 'travel_notes',
+               'intensity', 'approved_hours', 'notes'}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return
@@ -260,6 +293,34 @@ def update_client(client_id, **kwargs):
     conn.execute(f"UPDATE clients SET {set_clause} WHERE id = ?", values)
     conn.commit()
     conn.close()
+
+
+def delete_client(client_id):
+    conn = get_connection()
+    conn.execute("DELETE FROM clients WHERE id = ?", (client_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_client_by_id(client_id):
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT id, name, schedule_needed, days, in_home, travel_notes, intensity, "
+        "approved_hours, notes FROM clients WHERE id = ?",
+        (client_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def client_assignment_count(client_name):
+    conn = get_connection()
+    count = conn.execute(
+        "SELECT COUNT(*) FROM assignments WHERE client_name = ?",
+        (client_name,)
+    ).fetchone()[0]
+    conn.close()
+    return count
 
 
 def delete_all_clients():
