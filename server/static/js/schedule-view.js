@@ -142,16 +142,20 @@ const ScheduleView = {
                 this.render(container);
             });
         });
-        // Lock toggle buttons
+        // Lock toggle buttons — bulk lock all siblings (same client+therapist+time across days)
         container.querySelectorAll('.lock-toggle-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
-                e.stopPropagation(); // Don't open modal
+                e.stopPropagation();
                 const id = parseInt(btn.dataset.assignmentId);
-                const nextLock = btn.dataset.nextLock || null;
+                const assignment = this.assignments.find(a => a.id === id);
+                if (!assignment) return;
+                const siblings = this._findSiblings(assignment);
+                const nextLock = this._nextBulkLock(siblings);
                 try {
-                    await API.setLockType(id, nextLock);
-                    const label = nextLock === 'soft' ? 'Soft locked' : nextLock === 'hard' ? 'Hard locked' : 'Unlocked';
-                    App.toast(label, 'success');
+                    await Promise.all(siblings.map(s => API.setLockType(s.id, nextLock)));
+                    const verb = nextLock === 'soft' ? 'Soft locked' : nextLock === 'hard' ? 'Hard locked' : 'Unlocked';
+                    const scope = siblings.length > 1 ? ` ${siblings.length} days` : '';
+                    App.toast(`${verb}${scope}`, 'success');
                     await this.refresh();
                 } catch (err) {
                     App.toast('Lock failed: ' + err.message, 'error');
@@ -305,6 +309,28 @@ const ScheduleView = {
         return html;
     },
 
+    /** Same client+therapist+start+end across days = one logical recurring assignment. */
+    _findSiblings(a) {
+        const startNorm = this.toInputTime(a.Start);
+        const endNorm = this.toInputTime(a.End);
+        return this.assignments.filter(x =>
+            x.Client === a.Client &&
+            x.Therapist === a.Therapist &&
+            this.toInputTime(x.Start) === startNorm &&
+            this.toInputTime(x.End) === endNorm
+        );
+    },
+
+    /** Cycle: weakest current state → soft → hard → unlocked. Never silently downgrades. */
+    _nextBulkLock(siblings) {
+        const states = siblings.map(s => s.LockType || null);
+        const hasUnlocked = states.some(s => !s);
+        const allHard = states.every(s => s === 'hard');
+        if (hasUnlocked) return 'soft';
+        if (allHard) return null;
+        return 'hard'; // all soft, or mixed soft+hard
+    },
+
     _lockIcon(lockType) {
         if (lockType === 'hard') {
             return '<svg class="card-lock card-lock-hard" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
@@ -334,10 +360,15 @@ const ScheduleView = {
         html += this._lockIcon(lockType);
         html += `<span class="card-loc ${locClass}">${locIcon}</span>`;
         if (a.id) {
-            const nextLock = !lockType ? 'soft' : lockType === 'soft' ? 'hard' : null;
-            const btnTitle = !lockType ? 'Lock (soft)' : lockType === 'soft' ? 'Lock (hard)' : 'Unlock';
+            const siblings = this._findSiblings(a);
+            const next = this._nextBulkLock(siblings);
+            const verb = next === 'soft' ? 'Soft lock' : next === 'hard' ? 'Hard lock' : 'Unlock';
+            const scope = siblings.length > 1
+                ? ` all ${siblings.length} days (${siblings.map(s => s.Day).join(', ')})`
+                : '';
+            const btnTitle = `${verb}${scope}`;
             const btnIcon = !lockType ? '&#128275;' : lockType === 'soft' ? '&#128274;' : '&#128275;';
-            html += `<button class="lock-toggle-btn" data-assignment-id="${a.id}" data-next-lock="${nextLock || ''}" title="${btnTitle}">${btnIcon}</button>`;
+            html += `<button class="lock-toggle-btn" data-assignment-id="${a.id}" title="${btnTitle}">${btnIcon}</button>`;
         }
         html += `</div></div>`;
         html += `<div class="card-time">${this.formatTime(start)} - ${this.formatTime(end)}</div>`;

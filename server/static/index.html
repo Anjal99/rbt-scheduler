@@ -419,13 +419,14 @@
                             <option value="Sat">Saturday</option>
                         </select>
                         <div id="modal-days-multi" class="checkbox-group" style="display:none">
-                            <label class="cb-label"><input type="checkbox" value="Mon"> Mon</label>
-                            <label class="cb-label"><input type="checkbox" value="Tue"> Tue</label>
-                            <label class="cb-label"><input type="checkbox" value="Wed"> Wed</label>
-                            <label class="cb-label"><input type="checkbox" value="Thu"> Thu</label>
-                            <label class="cb-label"><input type="checkbox" value="Fri"> Fri</label>
-                            <label class="cb-label"><input type="checkbox" value="Sat"> Sat</label>
+                            <div class="cb-row" data-day="Mon"><label class="cb-label"><input type="checkbox" value="Mon"> Mon</label><button type="button" class="day-lock-btn" data-day="Mon" style="display:none"></button></div>
+                            <div class="cb-row" data-day="Tue"><label class="cb-label"><input type="checkbox" value="Tue"> Tue</label><button type="button" class="day-lock-btn" data-day="Tue" style="display:none"></button></div>
+                            <div class="cb-row" data-day="Wed"><label class="cb-label"><input type="checkbox" value="Wed"> Wed</label><button type="button" class="day-lock-btn" data-day="Wed" style="display:none"></button></div>
+                            <div class="cb-row" data-day="Thu"><label class="cb-label"><input type="checkbox" value="Thu"> Thu</label><button type="button" class="day-lock-btn" data-day="Thu" style="display:none"></button></div>
+                            <div class="cb-row" data-day="Fri"><label class="cb-label"><input type="checkbox" value="Fri"> Fri</label><button type="button" class="day-lock-btn" data-day="Fri" style="display:none"></button></div>
+                            <div class="cb-row" data-day="Sat"><label class="cb-label"><input type="checkbox" value="Sat"> Sat</label><button type="button" class="day-lock-btn" data-day="Sat" style="display:none"></button></div>
                         </div>
+                        <div id="modal-days-hint" class="modal-hint" style="display:none">Tip: the lock button on a card locks all days at once. Use the icon next to a day above to lock just that day.</div>
                     </div>
                     <div class="form-group">
                         <label>Location</label>

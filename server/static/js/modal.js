@@ -64,6 +64,52 @@ const AssignmentModal = {
 
     _editingLockType: null,
 
+    /** Show a lock icon next to each day that has a sibling. Wires click handler. */
+    _renderDayLocks() {
+        const container = document.getElementById('modal-days-multi');
+        const siblingByDay = {};
+        this._siblings.forEach(s => { siblingByDay[s.Day] = s; });
+
+        container.querySelectorAll('.day-lock-btn').forEach(btn => {
+            const day = btn.dataset.day;
+            const sib = siblingByDay[day];
+            if (!sib) {
+                btn.style.display = 'none';
+                btn.onclick = null;
+                return;
+            }
+            btn.style.display = '';
+            const lock = sib.LockType || null;
+            const next = !lock ? 'soft' : lock === 'soft' ? 'hard' : null;
+            btn.innerHTML = !lock ? '&#128275;' : lock === 'soft' ? '&#128274;' : '&#128274;';
+            btn.classList.toggle('locked-soft', lock === 'soft');
+            btn.classList.toggle('locked-hard', lock === 'hard');
+            const verb = next === 'soft' ? 'Soft lock' : next === 'hard' ? 'Hard lock' : 'Unlock';
+            btn.title = `${verb} ${day} only`;
+            btn.onclick = async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                btn.disabled = true;
+                try {
+                    await API.setLockType(sib.id, next);
+                    // Refresh ScheduleView so siblings reflect the new state
+                    await ScheduleView.refresh();
+                    // Re-find siblings from updated data
+                    this._siblings = this._findSiblings({
+                        Client: sib.Client, Therapist: sib.Therapist,
+                        Start: sib.Start, End: sib.End,
+                    });
+                    this._renderDayLocks();
+                    App.toast(`${day} ${next || 'unlocked'}`, 'success');
+                } catch (err) {
+                    App.toast('Lock failed: ' + err.message, 'error');
+                } finally {
+                    btn.disabled = false;
+                }
+            };
+        });
+    },
+
     /**
      * Find sibling assignments: same client + therapist + start + end on other days.
      */
@@ -95,6 +141,9 @@ const AssignmentModal = {
         multiContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
             cb.checked = siblingDays.has(cb.value);
         });
+
+        this._renderDayLocks();
+        document.getElementById('modal-days-hint').style.display = '';
 
         // Populate fields
         document.getElementById('modal-client').value = assignment.Client || '';
@@ -153,6 +202,9 @@ const AssignmentModal = {
             cb.checked = (cb.value === ScheduleView.currentDay);
             cb.disabled = false;
         });
+        // No siblings in add mode — hide per-day lock buttons + hint
+        multiContainer.querySelectorAll('.day-lock-btn').forEach(b => { b.style.display = 'none'; });
+        document.getElementById('modal-days-hint').style.display = 'none';
 
         document.getElementById('modal-client').selectedIndex = 0;
         document.getElementById('modal-therapist').selectedIndex = 0;
@@ -177,6 +229,11 @@ const AssignmentModal = {
         // Reset day controls to default state
         document.getElementById('modal-day').style.display = '';
         document.getElementById('modal-days-multi').style.display = 'none';
+        document.getElementById('modal-days-hint').style.display = 'none';
+        document.querySelectorAll('#modal-days-multi .day-lock-btn').forEach(b => {
+            b.style.display = 'none';
+            b.onclick = null;
+        });
     },
 
     _show() {

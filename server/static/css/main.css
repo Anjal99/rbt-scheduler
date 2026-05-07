@@ -381,6 +381,33 @@ body {
     font-size: .85rem;
     cursor: pointer;
 }
+.checkbox-group .cb-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.day-lock-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: .9rem;
+    line-height: 1;
+    border-radius: 4px;
+    color: #6b7280;
+}
+.day-lock-btn:hover { background: #f3f4f6; }
+.day-lock-btn.locked-soft { color: #d97706; }
+.day-lock-btn.locked-hard { color: #dc2626; }
+.modal-hint {
+    margin-top: 4px;
+    padding: 6px 10px;
+    background: #f9fafb;
+    border-left: 3px solid #d1d5db;
+    border-radius: 3px;
+    font-size: .75rem;
+    color: #6b7280;
+}
 
 .modal-validation {
     margin-top: 12px;
